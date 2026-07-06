@@ -2200,7 +2200,86 @@ function PhaseStratagems({coreStrats,detStrats,detName}){
 
 
 // ── WAR HUB SCREEN ────────────────────────────────────────────────────────────
-function WarHubScreen({savedBattles,setSavedBattles,setBattle,setScreen,onBack}){
+// ── ONLINE MULTIPLAYER (remote battles) ─────────────────────────────────────
+// Turn-based sync through a Supabase table (strategium_rooms). The publishable
+// key below is a client key by design — access is limited by row-level
+// security, and a room is only reachable by whoever has its random code.
+// HIDDEN INFORMATION: Secret Missions (and any mission card flagged secret)
+// are never uploaded — they live only on their owner's device until revealed.
+const MP_URL='https://raodnacctikccblmblsh.supabase.co';
+const MP_KEY='sb_publishable_HM_QY33m7UUMJ54fKHEhfw_LHcFEXz0';
+const MP_HEADERS={'apikey':MP_KEY,'Authorization':'Bearer '+MP_KEY,'Content-Type':'application/json'};
+function mpNewCode(){
+  const alphabet='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no confusable 0/O/1/I/L
+  let c='';
+  for(let i=0;i<6;i++) c+=alphabet[Math.floor(Math.random()*alphabet.length)];
+  return c;
+}
+async function mpGetRoom(code){
+  const r=await fetch(`${MP_URL}/rest/v1/strategium_rooms?code=eq.${encodeURIComponent(code)}&select=*`,{headers:MP_HEADERS});
+  if(!r.ok) throw new Error('room fetch failed ('+r.status+')');
+  const rows=await r.json();
+  return rows[0]||null;
+}
+async function mpCreateRoom(code,meta){
+  const r=await fetch(`${MP_URL}/rest/v1/strategium_rooms`,{
+    method:'POST',headers:{...MP_HEADERS,Prefer:'return=minimal'},
+    body:JSON.stringify({code,meta,state:{},version:0}),
+  });
+  if(!r.ok) throw new Error('room create failed ('+r.status+')');
+  return code;
+}
+async function mpPatchRoom(code,fields){
+  const r=await fetch(`${MP_URL}/rest/v1/strategium_rooms?code=eq.${encodeURIComponent(code)}`,{
+    method:'PATCH',headers:{...MP_HEADERS,Prefer:'return=minimal'},
+    body:JSON.stringify({...fields,updated_at:new Date().toISOString()}),
+  });
+  if(!r.ok) throw new Error('room update failed ('+r.status+')');
+}
+
+function WarHubScreen({savedBattles,setSavedBattles,setBattle,setScreen,onBack,armies}){
+  // Join an online battle by room code
+  const [joinCode,setJoinCode]=React.useState('');
+  const [joinBusy,setJoinBusy]=React.useState(false);
+  const [joinErr,setJoinErr]=React.useState(null);
+  const [joinRoom,setJoinRoom]=React.useState(null); // room fetched, awaiting army pick
+
+  async function fetchJoinRoom(){
+    const code=joinCode.trim().toUpperCase();
+    if(code.length<4) return;
+    setJoinBusy(true); setJoinErr(null);
+    try{
+      const room=await mpGetRoom(code);
+      if(!room){ setJoinErr('No battle found with that code.'); return; }
+      setJoinRoom(room);
+    }catch(e){ setJoinErr('Connection failed — check your internet. '+String(e.message||'').slice(0,60)); }
+    finally{ setJoinBusy(false); }
+  }
+
+  async function joinWithArmy(army){
+    if(!joinRoom) return;
+    setJoinBusy(true); setJoinErr(null);
+    try{
+      const meta=joinRoom.meta||{};
+      if(!meta.guestArmy){
+        await mpPatchRoom(joinRoom.code,{meta:{...meta,guestArmy:army,guestName:army.name}});
+      }
+      const myArmy=meta.guestArmy||army;
+      setBattle({
+        id:'mp_'+joinRoom.code,
+        mode:meta.mode||null, pts:meta.pts||2000, passPlay:false,
+        p1Name:meta.p1Name||'Host', p2Name:meta.guestName||army.name||'Challenger',
+        p1Army:meta.hostArmy, p2Army:myArmy,
+        defender:meta.defender||1, firstPlayer:meta.firstPlayer||1,
+        initMissionCards:meta.initMissionCards||[],
+        savedState:(joinRoom.version>0&&joinRoom.state&&Object.keys(joinRoom.state).length)?joinRoom.state:undefined,
+        remote:{code:joinRoom.code,role:'guest',player:2},
+      });
+      setScreen('battle');
+    }catch(e){ setJoinErr('Join failed: '+String(e.message||'').slice(0,80)); }
+    finally{ setJoinBusy(false); }
+  }
+
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
       <div className="topbar">
@@ -2249,6 +2328,43 @@ function WarHubScreen({savedBattles,setSavedBattles,setBattle,setScreen,onBack})
           <div style={{fontFamily:"'Cinzel',serif",fontSize:15,fontWeight:900,color:'var(--redBright)',letterSpacing:2,textTransform:'uppercase',marginBottom:4}}>New Engagement</div>
           <div style={{fontSize:10,color:'var(--brass)',letterSpacing:1,textTransform:'uppercase',marginBottom:8}}>Mission Setup</div>
           <div style={{fontSize:11,color:'var(--text3)',lineHeight:1.6}}>Select mission pack · Choose armies · Begin the battle</div>
+        </div>
+
+        {/* ── JOIN ONLINE BATTLE ── */}
+        <div style={{background:'var(--bg1)',border:'1px solid var(--border)',borderLeft:'3px solid var(--blueBright)',padding:'14px 16px',marginBottom:6}}>
+          <div style={{fontFamily:"'Cinzel',serif",fontSize:12,fontWeight:700,color:'var(--blueBright)',letterSpacing:2,textTransform:'uppercase',marginBottom:4}}>Join Online Battle</div>
+          <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.5,marginBottom:8}}>
+            Enter the room code your opponent created when hosting. You take turns from your own devices; your Secret Missions stay hidden on your device.
+          </div>
+          {!joinRoom?(
+            <div style={{display:'flex',gap:6}}>
+              <input placeholder="ROOM CODE" value={joinCode}
+                onChange={e=>setJoinCode(e.target.value.toUpperCase())}
+                style={{flex:1,fontSize:14,letterSpacing:4,textTransform:'uppercase',fontFamily:"'Cinzel',serif"}}
+                maxLength={8}/>
+              <button className="btn btn-gold btn-sm" disabled={joinBusy||joinCode.trim().length<4} onClick={fetchJoinRoom}>
+                {joinBusy?'…':'Find'}
+              </button>
+            </div>
+          ):(
+            <div>
+              <div style={{fontSize:10,color:'var(--text2)',marginBottom:6}}>
+                <b style={{color:'var(--gold)'}}>{joinRoom.meta?.p1Name||'Host'}</b> · {joinRoom.meta?.mode?.name||'Open battle'} · {joinRoom.meta?.pts||'?'}pts
+                {joinRoom.meta?.guestArmy&&<span style={{color:'var(--greenBright)'}}> · rejoining as {joinRoom.meta.guestName}</span>}
+              </div>
+              <div style={{fontSize:9,color:'var(--text3)',marginBottom:5}}>{joinRoom.meta?.guestArmy?'Continue with your registered army:':'Select your army:'}</div>
+              {(armies||[]).filter(a=>!joinRoom.meta?.pts||a.pointsLimit<=joinRoom.meta.pts||true).map(a=>(
+                <button key={a.id} className="btn btn-outline btn-sm" style={{width:'100%',marginBottom:4,textAlign:'left'}}
+                  disabled={joinBusy}
+                  onClick={()=>joinWithArmy(a)}>
+                  {a.name} · {a.factionName} · {(a.units||[]).length} units
+                </button>
+              ))}
+              {(armies||[]).length===0&&<div style={{fontSize:10,color:'var(--redBright)'}}>No armies on this device — build one in The Armoury first.</div>}
+              <button className="btn btn-ghost btn-xs" onClick={()=>setJoinRoom(null)}>← different code</button>
+            </div>
+          )}
+          {joinErr&&<div style={{fontSize:9,color:'var(--redBright)',marginTop:6}}>{joinErr}</div>}
         </div>
       </div>
     </div>
@@ -3791,6 +3907,9 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
   const [mode,setMode]=useState(null);
   const [pts,setPts]=useState(2000);
   const [passPlay,setPassPlay]=useState(false);
+  const [onlineHost,setOnlineHost]=useState(false); // host an online room
+  const [hostBusy,setHostBusy]=useState(false);
+  const [hostErr,setHostErr]=useState(null);
   const [p1Army,setP1Army]=useState(null);
   const [p2Army,setP2Army]=useState(null);
   const [p1Name,setP1Name]=useState('');
@@ -3888,8 +4007,9 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
       id:'secret_'+Date.now(),name:secretMission.name,
       type:'secret',status:'active',fromPack:selectedMode?.name,
       text:secretMission.text,
+      secret:true, // never synced to the opponent in online battles
     });
-    onStart({
+    const battleData={
       mode:selectedMode,
       pts,passPlay,
       p1Name:p1Name.trim()||'Player 1',
@@ -3900,7 +4020,27 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
       // Mission state passed straight into battle
       initMissionCards,
       primaryMission,missionRules,deployment,battlefield,secondaryMode,p1SecMode,p2SecMode,
-    });
+    };
+    if(onlineHost&&!passPlay){
+      // Create the online room first; the opponent joins by code from their device.
+      setHostBusy(true); setHostErr(null);
+      const code=mpNewCode();
+      mpCreateRoom(code,{
+        mode:selectedMode?{id:selectedMode.id,name:selectedMode.name}:null,
+        pts,
+        p1Name:battleData.p1Name,
+        defender,firstPlayer,
+        hostArmy:battleData.p1Army,
+        // secret cards stay on the host device
+        initMissionCards:initMissionCards.filter(c=>!c.secret),
+      }).then(()=>{
+        onStart({...battleData,p2Army:null,p2Name:'Awaiting challenger…',remote:{code,role:'host',player:1}});
+      }).catch(e=>{
+        setHostErr('Could not create the online room — check your internet. '+String(e.message||'').slice(0,60));
+      }).finally(()=>setHostBusy(false));
+      return;
+    }
+    onStart(battleData);
   }
 
   // Steps: 1=GameType 2=Points 3=Armies 4=RollOff 5=Mission 6=Battlefield 7=Ready
@@ -4026,7 +4166,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
             </div>
             {[{val:false,title:'Single Commander',sub:'Track your army only. Opponent managed separately.'},{val:true,title:'Pass & Play',sub:'Both armies tracked on this device. Pass the device between turns.'}].map(opt=>(
               <div key={String(opt.val)}
-                onClick={()=>setPassPlay(opt.val)}
+                onClick={()=>{setPassPlay(opt.val);if(opt.val)setOnlineHost(false);}}
                 style={{
                   background:passPlay===opt.val?'var(--golddim)':'var(--bg1)',
                   border:`1px solid ${passPlay===opt.val?'var(--gold)':'var(--border)'}`,
@@ -4037,6 +4177,22 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
                 <div style={{fontSize:11,color:'var(--text3)',letterSpacing:.3}}>{opt.sub}</div>
               </div>
             ))}
+
+            {/* Online mode — host a room another device can join by code */}
+            {!passPlay&&(
+              <div onClick={()=>setOnlineHost(v=>!v)}
+                style={{background:onlineHost?'rgba(74,122,184,.12)':'var(--bg1)',
+                  border:`1px solid ${onlineHost?'var(--blueBright)':'var(--border)'}`,
+                  borderLeft:onlineHost?'3px solid var(--blueBright)':'3px solid transparent',
+                  padding:'12px 16px',marginBottom:12,cursor:'pointer'}}>
+                <div style={{fontFamily:'Cinzel,serif',fontSize:12,color:onlineHost?'var(--blueBright)':'var(--text)',letterSpacing:.5,marginBottom:3}}>
+                  🌐 Online Battle {onlineHost?'— ON':''}
+                </div>
+                <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.5}}>
+                  Host a room and get a code. Your opponent joins from their own device (War → Join Online Battle), brings their own army, and you take turns — the tracker syncs automatically. Secret Missions stay hidden on each player's device.
+                </div>
+              </div>
+            )}
 
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
               <div>
@@ -4331,9 +4487,10 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
                   </div>
                 )}
                 <button className="btn btn-gold" style={{width:'100%',padding:16,fontSize:12,letterSpacing:4,opacity:canStart?1:0.5,marginTop:16}}
-                  onClick={canStart?handleStart:undefined} disabled={!canStart||!p1Army}>
-                  BEGIN ENGAGEMENT
+                  onClick={canStart&&!hostBusy?handleStart:undefined} disabled={!canStart||!p1Army||hostBusy}>
+                  {hostBusy?'CREATING ROOM…':'BEGIN ENGAGEMENT'}
                 </button>
+                {hostErr&&<div style={{fontSize:10,color:'var(--redBright)',textAlign:'center',marginTop:6}}>{hostErr}</div>}
                 {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Resolve army issues above to begin</div>}
               </>);
             })()}
@@ -4491,9 +4648,10 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
                   </div>
                 )}
                 <button className="btn btn-gold" style={{width:'100%',padding:16,fontSize:12,letterSpacing:4,opacity:canStart?1:0.5,marginTop:16}}
-                  onClick={canStart?handleStart:undefined} disabled={!canStart||!p1Army}>
-                  BEGIN ENGAGEMENT
+                  onClick={canStart&&!hostBusy?handleStart:undefined} disabled={!canStart||!p1Army||hostBusy}>
+                  {hostBusy?'CREATING ROOM…':'BEGIN ENGAGEMENT'}
                 </button>
+                {hostErr&&<div style={{fontSize:10,color:'var(--redBright)',textAlign:'center',marginTop:6}}>{hostErr}</div>}
                 {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Resolve army issues above to begin</div>}
               </>);
             })()}
@@ -5589,7 +5747,7 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
                   transition:'all .15s'}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:targetId===e.id?'var(--redBright)':'var(--text)'}}>{stripHTML(e.unit?.name)}</div>
                 <div style={{fontSize:9,color:'var(--text3)',marginTop:1}}>
-                  {(battleWounds[e.id]??(parseInt(e.unit?.models?.[0]?.w)||1))}/{parseInt(e.unit?.models?.[0]?.w)||1}W
+                  {(()=>{const pw=parseInt(e.unit?.models?.[0]?.w)||1;const c=e.unit?.unit_composition||[];let n=0;c.forEach(x=>{const m=String(x.description||x.desc||x).match(/^(\d+)/);if(m)n+=parseInt(m[1]);});const tot=pw*(n||1);return `${battleWounds[e.id]??tot}/${tot}W`;})()}
                   {e.unit?.models?.[0]?.t&&<span style={{marginLeft:8}}>T{e.unit.models[0].t}</span>}
                   {e.unit?.models?.[0]?.sv&&<span style={{marginLeft:8}}>{e.unit.models[0].sv}</span>}
                 </div>
@@ -6654,10 +6812,16 @@ function ExpandableRow({title,subtitle,badge,badgeColor,children}){
 
 
 function BattleScreen({battle,coreStrats,onPause,onEnd}){
-  const {mode,pts,passPlay,p1Army,p2Army,defender,firstPlayer,p1Name:_p1Name,p2Name:_p2Name} = battle;
+  const {mode,pts,passPlay,p1Army,defender,firstPlayer,p1Name:_p1Name,p2Name:_p2Name} = battle;
+  // ── ONLINE BATTLE ──
+  // remote = {code, role:'host'|'guest', player:1|2}. The guest's army arrives
+  // through the room once they join, so p2Army can start out null for a host.
+  const remote=battle.remote||null;
+  const [remoteGuest,setRemoteGuest]=useState(null); // {army,name} discovered by polling
+  const p2Army=battle.p2Army||remoteGuest?.army||null;
   // Use provided names; fall back to role-based labels
   const p1Label=_p1Name||'Player 1';
-  const p2Label=_p2Name||'Player 2';
+  const p2Label=remoteGuest?.name||_p2Name||'Player 2';
   // Role labels — defender/attacker + first turn
   const defenderPlayer=battle.defender||1;
   const firstTurnPlayer=battle.firstPlayer||1;
@@ -6728,7 +6892,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   // Active Effects and flows into the combat rollers. Runs once per battle —
   // resumed battles already carry their effects in savedState.
   React.useEffect(()=>{
-    if(sv.activeEffects) return;
     const seed=[];
     [[1,p1Army],[2,p2Army]].forEach(([pl,a])=>{
       const det=a?.detachment;
@@ -6752,7 +6915,82 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       const have=new Set(fx.map(f=>f.id));
       return [...fx,...seed.filter(s=>!have.has(s.id))];
     });
-  },[]);
+  },[p2Army?1:0]);
+
+  // ── ONLINE SYNC ENGINE ────────────────────────────────────────────────────
+  // Turn-based, so simple last-writer-wins with a monotonically increasing
+  // version is enough. Everything except secret-flagged mission cards syncs;
+  // each device keeps its own secrets and merges them back in on receive.
+  const canAct=!remote||activePlayer===remote.player;
+  const syncVer=React.useRef(0);        // highest version seen/pushed
+  const applyingRemote=React.useRef(false);
+  const pushTimer=React.useRef(null);
+
+  function buildSyncState(){
+    return {round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,
+      missionCards:missionCards.filter(c=>!c.secret),
+      activeEffects,armyAbilityUsed};
+  }
+  function applyRemoteState(st){
+    if(!st||typeof st!=='object'||st.round==null) return;
+    applyingRemote.current=true;
+    setRound(st.round);
+    setActivePlayer(st.activePlayer||1);
+    setPhase(st.phase||0);
+    setCP(st.cp||{p1:0,p2:0});
+    setVP(st.vp||{p1:0,p2:0,p1sec:0,p2sec:0});
+    setWounds(st.wounds||{});
+    setDestroyed(st.destroyed||{});
+    setEngaged(st.engaged||{});
+    setMissionCards(prev=>{
+      const mySecrets=prev.filter(c=>c.secret);
+      return [...(st.missionCards||[]),...mySecrets];
+    });
+    setActiveEffects(st.activeEffects||[]);
+    setArmyAbilityUsed(st.armyAbilityUsed||{});
+    setTimeout(()=>{applyingRemote.current=false;},50);
+  }
+
+  // Poll the room: pick up the opponent joining, and any newer state.
+  React.useEffect(()=>{
+    if(!remote) return;
+    let stopped=false;
+    const tick=async()=>{
+      try{
+        const room=await mpGetRoom(remote.code);
+        if(stopped||!room) return;
+        if(remote.role==='host'&&!p2Army&&room.meta?.guestArmy){
+          setRemoteGuest({army:room.meta.guestArmy,name:room.meta.guestName||'Challenger'});
+        }
+        if(room.version>syncVer.current){
+          syncVer.current=room.version;
+          applyRemoteState(room.state);
+        }
+      }catch(e){/* offline blip — keep trying */}
+    };
+    tick();
+    const iv=setInterval(tick,4000);
+    return ()=>{stopped=true;clearInterval(iv);};
+  },[remote?.code,p2Army]);
+
+  // Push local changes (debounced). Both sides may push — the turn structure
+  // keeps writes naturally serialized, and version ordering settles races.
+  React.useEffect(()=>{
+    if(!remote||applyingRemote.current) return;
+    // The host seeds the room's first state; a guest stays silent until it
+    // has pulled that seed, otherwise its fresh zero-state would win the race
+    // and wipe the host's CP/VP.
+    if(remote.role!=='host'&&syncVer.current===0) return;
+    clearTimeout(pushTimer.current);
+    pushTimer.current=setTimeout(async()=>{
+      try{
+        const version=Math.max(syncVer.current+1,Date.now());
+        syncVer.current=version;
+        await mpPatchRoom(remote.code,{state:buildSyncState(),version});
+      }catch(e){/* retry rides on the next change or poll */}
+    },1200);
+    return ()=>clearTimeout(pushTimer.current);
+  },[round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed]);
   // Army-rule panel UI state
   const [armyRuleOpen,setArmyRuleOpen]=useState(true);
   const [armyRuleTargetId,setArmyRuleTargetId]=useState('');
@@ -7077,6 +7315,18 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
   return(
     <>
+      {/* ── WAITING FOR CHALLENGER (online host) ── */}
+      {remote&&!p2Army&&(
+        <div style={{position:'fixed',inset:0,zIndex:450,background:'rgba(5,5,8,.96)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:14,padding:24}}>
+          <div style={{fontFamily:"'Cinzel',serif",fontSize:12,letterSpacing:3,color:'var(--brass)',textTransform:'uppercase'}}>Online Battle</div>
+          <div style={{fontFamily:"'Cinzel',serif",fontSize:34,letterSpacing:10,color:'var(--gold)',border:'1px solid var(--goldborder)',padding:'12px 26px'}}>{remote.code}</div>
+          <div style={{fontSize:11,color:'var(--text2)',textAlign:'center',maxWidth:300,lineHeight:1.7}}>
+            Give this code to your opponent. On their device: <b>War → Join Online Battle</b>. The battle begins the moment they register their army.
+          </div>
+          <div className="spinner"/>
+          <button className="btn btn-outline btn-sm" onClick={onEnd}>Cancel Battle</button>
+        </div>
+      )}
       {/* ── BATTLE HEADER ── */}
       <div style={{background:'var(--bg0)',borderBottom:'1px solid var(--goldborder)',flexShrink:0}}>
         {/* Active player banner */}
@@ -7085,6 +7335,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             {activePlayer===1?p1Label:p2Label}'s Turn
           </div>
           <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            {remote&&<span style={{fontSize:9,color:'var(--blueBright)',border:'1px solid var(--blueBright)',padding:'0 5px',letterSpacing:2}}>🌐 {remote.code}</span>}
             <span style={{fontSize:9,color:'var(--text3)'}}>Round {round}/5</span>
             <span style={{fontSize:9,color:'var(--gold)'}}>{PHASES[phase]} Phase</span>
             <button onClick={()=>setShowPause(true)}
@@ -7094,6 +7345,11 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
           </div>
         </div>
+        {remote&&!canAct&&(
+          <div style={{background:'rgba(74,122,184,.12)',borderBottom:'1px solid var(--blueBright)',padding:'4px 12px',fontSize:9,color:'var(--blueBright)',letterSpacing:1,textAlign:'center'}}>
+            ⏳ {activePlayer===1?p1Label:p2Label} is taking their turn — you are watching live. Controls unlock on your turn.
+          </div>
+        )}
         {/* Score bar */}
         <div style={{display:'flex',alignItems:'stretch',borderBottom:'1px solid var(--border)'}}>
           <div style={{flex:1,padding:'6px 12px',background:activePlayer===1?'rgba(200,168,75,.06)':'transparent',borderRight:'1px solid var(--border)'}}>
@@ -7154,6 +7410,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           ))}
 
           <button className="anim-press" onClick={()=>{
+              if(!canAct) return;
               playSFX('phase'); if(phase<4){
                 // Check for unactivated units — warn before proceeding
                 const activeUnits=(activeArmy?.units||[]).filter(e=>!destroyed[e.id]);
@@ -7210,7 +7467,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                     Gain 1CP at the start of your Command Phase (max 1CP/round from all sources combined).
                   </div>
                   <button className={`btn btn-sm ${cpGainedThisRound?'btn-outline':'btn-gold'}`} style={{width:'100%'}}
-                    disabled={cpGainedThisRound}
+                    disabled={cpGainedThisRound||!canAct}
                     onClick={()=>{
                       modCP(activePlayer,1);
                       setCpGainedRound(c=>({...c,[`p${activePlayer}`]:round}));
@@ -7352,7 +7609,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                             </select>
                           )}
                           <button className="btn btn-gold btn-sm" style={{width:'100%'}}
-                            disabled={(rule.targeting==='enemy_unit'&&!armyRuleTargetId)||(rule.targeting==='own_unit'&&!armyRuleUnitId)}
+                            disabled={(rule.targeting==='enemy_unit'&&!armyRuleTargetId)||(rule.targeting==='own_unit'&&!armyRuleUnitId)||!canAct}
                             onClick={activateArmyRule}>
                             {rule.cadence==='once_per_battle'?`Use ${rule.name}`:rule.targeting==='enemy_unit'?'Mark Target':rule.targeting==='own_unit'?'Issue to Unit':'Activate'}
                           </button>
@@ -7710,7 +7967,11 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                 )}
                 {(isActiveSection||sectionOpen)&&(army.units||[]).map(entry=>{
                   const u=entry.unit;
-                  const maxW=parseInt(u.models?.[0]?.w)||1;
+                  // Unit wound pool = models in the unit × wounds per model
+                  // (using only the first profile's W made a 10-Boy mob show 1/1W)
+                  const perModelW=parseInt(u.models?.[0]?.w)||1;
+                  const unitModels=(()=>{const c=u.unit_composition||[];let t=0;c.forEach(x=>{const m=String(x.description||x.desc||x).match(/^(\d+)/);if(m)t+=parseInt(m[1]);});return t||1;})();
+                  const maxW=perModelW*unitModels;
                   const curW=wounds[entry.id]??maxW;
                   const pct=Math.max(0,(curW/maxW)*100);
                   const isDestroyed=destroyed[entry.id];
@@ -7895,7 +8156,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                           </div>
 
                           {/* PHASE ACTIONS — active player only, not yet activated */}
-                          {(isActive||canActInFightPhase)&&!isActivated&&unitPhaseActions.length>0&&(
+                          {canAct&&(isActive||canActInFightPhase)&&!isActivated&&unitPhaseActions.length>0&&(
                             <div style={{padding:'0 10px 6px'}}>
                               <div style={{fontSize:8,letterSpacing:1.5,color:'var(--text3)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:4}}>Select Action</div>
                               <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
@@ -8290,7 +8551,9 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             </div>
             <button className="btn btn-gold" style={{width:'100%',padding:14,marginBottom:8,letterSpacing:2}}
               onClick={()=>onPause({
-                savedState:{round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed}
+                savedState:{round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed},
+                // online battles: persist the challenger discovered via the room
+                ...(remoteGuest?{p2Army:remoteGuest.army,p2Name:remoteGuest.name}:{})
               })}>
               Save &amp; Exit Battle
             </button>
@@ -8891,6 +9154,7 @@ function App(){
           setSavedBattles={setSavedBattles}
           setBattle={setBattle}
           setScreen={setScreen}
+          armies={armies}
           onBack={()=>{setAppOpen(false);setScreen('armies');}}
         />
       </div>
