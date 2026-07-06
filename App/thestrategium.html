@@ -701,9 +701,45 @@ const ART_OVERRIDES={
   'menu-aos-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_024527_5417d391-0fad-4d63-b2dc-72fdbd77e73d.png',
   'menu-40k-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025128_da4d9580-0e6b-4e09-8dbd-285230f1ee20.mp4',
   'menu-aos-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025200_81353701-7bd3-44d9-9f54-fd5422372e9d.mp4',
-  'transition-40k-aos.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025151_f77ebace-a953-4508-80d1-4523578a42a0.mp4',
+  'transition-40k-aos.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_134730_44f56e0d-cde2-4a44-8ee2-148c39ff289c.mp4',
 };
 function artURL(name){ return ART_OVERRIDES[name]||APP_ART_BASE+name; }
+
+// ── UNIT PHOTOS ─────────────────────────────────────────────────────────────
+// The repo carries ~900 official kit photos (WH40K/Images/<superfaction>/…)
+// named by GW SKU, so they can't be matched to datasheets by filename alone.
+// Mapping unit→photo lives on-device (localStorage, included in backups) and
+// is filled two ways: tap-to-assign in the unit detail screen, or the
+// Gemini-vision auto-identifier which looks at each photo and names the kit
+// (runs on this device with your own API key).
+const IMAGES_BASE='https://raw.githubusercontent.com/7moud7/The-Strategium/main/WH40K/Images/';
+const IMAGES_INDEX_URL='https://raw.githubusercontent.com/7moud7/The-Strategium/main/WH40K/Data/images-index.json';
+let IMAGES_INDEX=null;
+async function loadImagesIndex(){
+  if(IMAGES_INDEX) return IMAGES_INDEX;
+  try{ const r=await fetch(IMAGES_INDEX_URL); IMAGES_INDEX=r.ok?await r.json():{}; }
+  catch(e){ IMAGES_INDEX={}; }
+  return IMAGES_INDEX;
+}
+function getUnitImageMap(){ try{return JSON.parse(localStorage.getItem('wh40k_unitimages'))||{};}catch(e){return {};} }
+function setUnitImage(fid,uid,path){
+  const m=getUnitImageMap();
+  if(path) m[`${fid}:${uid}`]=path; else delete m[`${fid}:${uid}`];
+  try{localStorage.setItem('wh40k_unitimages',JSON.stringify(m));}catch(e){}
+}
+function unitImageURL(fid,uid){
+  const p=getUnitImageMap()[`${fid}:${uid}`];
+  return p?IMAGES_BASE+encodeURI(p):null;
+}
+// Vision call: kit photo + candidate list → datasheet name
+async function geminiIdentifyImage(b64,mime,unitNames){
+  const contents=[{role:'user',parts:[
+    {inline_data:{mime_type:mime||'image/jpeg',data:b64}},
+    {text:'This is an official Games Workshop Warhammer 40,000 kit photo. Which datasheet does it show? Answer with EXACTLY one name from this list and nothing else, or NONE if unsure:\n'+unitNames.join(' | ')}
+  ]}];
+  const reply=await callGemini('You identify Warhammer 40,000 miniature kits from photos. Answer only with a name from the provided list, or NONE.',contents,40,0.1);
+  return (reply||'').trim();
+}
 
 // ── AGE OF SIGMAR DATA ──────────────────────────────────────────────────────
 // Warscroll JSON converted from the BSData age-of-sigmar-4th catalogues
@@ -762,6 +798,8 @@ const MISSIONS_BASE = "https://raw.githubusercontent.com/7moud7/The-Strategium/m
 // they just won't have mission-pack-specific scoring detail.
 const MODE_RULES_FILES = {
   pariah_nexus_battles: 'Pariah Nexus/pariah-nexus.json',
+  leviathan: 'Leviathan/leviathan.json',
+  ca2025: 'Chapter Approved/chapter-approved-2025.json',
 };
 // Army rules JSON files on GitHub (generated from Wahapedia MHT files)
 // These live in WH40K/Data/ in the repo. Every faction in the index has one.
@@ -838,7 +876,9 @@ async function loadModeRulesFile(filename){
 async function loadActiveRules(mode){
   const core = await loadRulesFile('core-rules.json');
   const modeFile = mode?.id && MODE_RULES_FILES[mode.id];
-  const modeRules = modeFile ? await loadModeRulesFile(modeFile) : null;
+  let modeRules = modeFile ? await loadModeRulesFile(modeFile) : null;
+  // Crusade packs keep their rules under Rules/Crusades/
+  if(!modeRules && mode?.crusadeFile) modeRules = await loadRulesFile(mode.crusadeFile);
   return {core, modeRules};
 }
 
@@ -1394,6 +1434,10 @@ const SM_CHAPTERS = [
   {id:'Deathwatch',name:'Deathwatch'},
 ];
 
+// Tag every commander with its key so doctrine lookups survive the chapter
+// mapping below (spread copies carry the key along).
+Object.entries(COMMANDERS).forEach(([k,v])=>{v.key=k;});
+
 const SM_CHAPTER_COMMANDERS = {
   'Ultramarines': COMMANDERS.SM,
   'Blood Angels':  {...COMMANDERS.SM_BA},
@@ -1583,7 +1627,7 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
     const ctx=buildContext();
     try{
       const text=await callGemini(
-        `${cmd.voice}\n\nYou are advising during a Warhammer 40K 10th Edition battle.\n${ctx}\n\nRespond in character. Maximum 2-3 sentences. Be specific to the situation.`,
+        `${buildCounselSystemPrompt(cmd.key,cmd)}\n\nYou are advising during a Warhammer 40K 10th Edition battle.\n${ctx}\n\nRespond in character. Maximum 2-3 sentences. Be specific to the situation.`,
         [{role:'user',parts:[{text:PHASE_ADVICE_PROMPTS[phase]||'Give one key tactical reminder for this situation.'}]}],
         200
       );
@@ -1604,7 +1648,7 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
     try{
       const history=chat.slice(-6).map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
       const text=await callGemini(
-        `${cmd.voice}\n\nCurrent battle:\n${ctx}\n\nStay in character. Max 3 sentences per response.`,
+        `${buildCounselSystemPrompt(cmd.key,cmd)}\n\nCurrent battle:\n${ctx}\n\nStay in character. Max 3 sentences per response.`,
         [...history,{role:'user',parts:[{text:msg}]}],
         300
       );
@@ -2595,23 +2639,113 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
   const rangedWeps=(unit.weapons||[]).filter(w=>w.type==='Ranged');
   const meleeWeps=(unit.weapons||[]).filter(w=>w.type==='Melee');
 
+  // ── Unit photo (mapped from the repo's kit photo library) ──
+  const [imgVer,setImgVer]=React.useState(0);
+  const [showPhotoPicker,setShowPhotoPicker]=React.useState(false);
+  const [pickerImages,setPickerImages]=React.useState(null);
+  const [aiBusy,setAiBusy]=React.useState(false);
+  const [aiProgress,setAiProgress]=React.useState('');
+  const aiCancelRef=React.useRef(false);
+  const photoURL=unitImageURL(factionId,unit.id);
+
+  async function openPhotoPicker(){
+    setShowPhotoPicker(true);
+    const idx=await loadImagesIndex();
+    setPickerImages(idx[factionId]||[]);
+  }
+  // Gemini-vision pass over this faction's photos: assigns every photo it can
+  // confidently name to the matching datasheet (skips already-assigned ones).
+  async function autoIdentifyFaction(){
+    if(aiBusy) return;
+    if(!getGeminiKey()){ alert('Set your Gemini API key first (Menu → Settings & Backup).'); return; }
+    const idx=await loadImagesIndex();
+    const imgs=idx[factionId]||[];
+    const units=fdata?.units||[];
+    const names=units.map(u=>stripHTML(u.name));
+    if(!imgs.length||!names.length){ alert('No photos or unit list available for this faction.'); return; }
+    setAiBusy(true); aiCancelRef.current=false;
+    let assigned=0;
+    for(let i=0;i<imgs.length;i++){
+      if(aiCancelRef.current) break;
+      setAiProgress(`${i+1}/${imgs.length} — ${assigned} matched`);
+      const p=imgs[i];
+      const already=Object.entries(getUnitImageMap()).some(([k,v])=>v===p&&k.startsWith(factionId+':'));
+      if(already) continue;
+      try{
+        const resp=await fetch(IMAGES_BASE+encodeURI(p));
+        if(!resp.ok) continue;
+        const blob=await resp.blob();
+        if(blob.size>3_500_000) continue; // skip oversized files
+        const b64=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(blob);});
+        const answer=await geminiIdentifyImage(b64,blob.type,names);
+        if(answer&&answer.toUpperCase()!=='NONE'){
+          const hit=units.find(u=>stripHTML(u.name).toLowerCase()===answer.toLowerCase())
+            ||units.find(u=>answer.toLowerCase().includes(stripHTML(u.name).toLowerCase()));
+          // first photo wins — don't overwrite an existing assignment
+          if(hit&&!getUnitImageMap()[`${factionId}:${hit.id}`]){ setUnitImage(factionId,hit.id,p); assigned++; }
+        }
+      }catch(e){ /* skip unreadable/failed image */ }
+    }
+    setAiProgress(`Done — ${assigned} new photo${assigned!==1?'s':''} assigned.`);
+    setAiBusy(false); setImgVer(v=>v+1);
+  }
+
   return(
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal anim-slide-up" style={{padding:0,overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'88vh'}}>
 
         {/* Header */}
         <div style={{padding:'14px 16px 0',flexShrink:0}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+            {photoURL&&(
+              <img key={imgVer} src={photoURL} alt=""
+                onClick={openPhotoPicker}
+                style={{width:56,height:56,objectFit:'cover',border:'1px solid var(--goldborder)',flexShrink:0,cursor:'pointer'}}
+                onError={e=>{e.target.style.display='none';}}/>
+            )}
             <div style={{flex:1,minWidth:0}}>
               <div className="modal-title" style={{marginBottom:4}}>{unit.name}</div>
               <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <span className={`role-badge role-${(unit.role||"Other").replace(/\s+/g,"-")}`}>{unit.role}</span>
                 {isEpicHero(unit)&&<span className="tag tag-gold">Epic Hero</span>}
                 {isLeader(unit)&&<span className="tag tag-blue">Leader</span>}
+                <span onClick={openPhotoPicker} style={{fontSize:8,padding:'1px 6px',border:'1px solid var(--border)',color:'var(--text3)',cursor:'pointer',letterSpacing:.5}}>
+                  📷 {photoURL?'change photo':'assign photo'}
+                </span>
               </div>
             </div>
             <button className="btn btn-ghost btn-sm" onClick={onClose} style={{fontSize:14,padding:'4px 8px',flexShrink:0,fontFamily:"Cinzel,serif",letterSpacing:2}}>✕</button>
           </div>
+
+          {/* Photo picker overlay */}
+          {showPhotoPicker&&(
+            <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.92)',display:'flex',flexDirection:'column',padding:12}}
+              onClick={e=>e.target===e.currentTarget&&setShowPhotoPicker(false)}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8,gap:8}}>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',letterSpacing:1}}>Photo — {stripHTML(unit.name)}</div>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  {aiBusy
+                    ?<button className="btn btn-outline btn-xs" onClick={()=>{aiCancelRef.current=true;}}>Stop</button>
+                    :<button className="btn btn-gold btn-xs" onClick={autoIdentifyFaction}>✨ Auto-identify faction (AI)</button>}
+                  <button className="btn btn-ghost btn-xs" onClick={()=>setShowPhotoPicker(false)}>✕</button>
+                </div>
+              </div>
+              {aiProgress&&<div style={{fontSize:9,color:'var(--brass)',marginBottom:6}}>{aiProgress}</div>}
+              <div style={{flex:1,overflowY:'auto',display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(86px,1fr))',gap:6}}>
+                {pickerImages===null&&<div className="spinner"/>}
+                {pickerImages?.length===0&&<div style={{fontSize:10,color:'var(--text3)'}}>No photos for this faction in the repo.</div>}
+                {(pickerImages||[]).map(p=>{
+                  const sel=getUnitImageMap()[`${factionId}:${unit.id}`]===p;
+                  return(
+                    <img key={p} src={IMAGES_BASE+encodeURI(p)} loading="lazy" alt=""
+                      onClick={()=>{setUnitImage(factionId,unit.id,sel?null:p);setImgVer(v=>v+1);if(!sel)setShowPhotoPicker(false);}}
+                      style={{width:'100%',aspectRatio:'1',objectFit:'cover',cursor:'pointer',
+                        border:`2px solid ${sel?'var(--gold)':'var(--border)'}`,opacity:sel?1:.85}}/>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Size selector */}
           {unit.costs?.length>1&&(
@@ -3347,6 +3481,186 @@ const BATTLE_SIZES = [
   {id:'onslaught', label:'Onslaught', pts:3000, duration:'~4 hours', reserves:750},
 ];
 
+// ── COMMANDER DOCTRINES ─────────────────────────────────────────────────────
+// Original character-voice definitions (no published text is reproduced):
+// each captures a commander's philosophy, cadence and decision-making so the
+// AI produces authentic ORIGINAL dialogue. Used for tactical counsel prompts.
+const GLOBAL_COMMANDER_DOCTRINE=`
+GLOBAL BEHAVIOUR RULES (these override everything else):
+- A commander never simply tells the player what button to press. A commander explains WHY a decision is strategically sound according to their philosophy.
+- Never give illegal rules advice. The official Core Rules, Munitorum Field Manual, Balance Dataslate and Rules Commentary always take precedence over any other source or instinct.
+- Prioritise winning the mission over simply destroying enemy units.
+- Take the current primary mission, secondary missions, Command Points, objective control, reserves and remaining battle rounds into account.
+- Warn the player when a suggested move risks losing primary points or exposing key units.
+- Adjust advice to the actual battle state given below — never repeat generic faction guidance.
+- Stay in character while remaining concise and useful. Personality colours the wording; the underlying recommendation must be grounded in the rules and the numbers provided.
+- When probability numbers are provided, use them: weigh expected damage against what the attack exposes or forfeits.`;
+
+const COMMANDER_DOCTRINES={
+  SM:{philosophy:'Victory through planning, discipline and objective control.',
+    personality:'Calm, rational, patient, analytical, inspirational without being emotional.',
+    speech:'Complete formal sentences, military terminology, rarely jokes, explains reasoning, treats the player like a fellow officer.',
+    priorities:'Primary scoring; efficient trades; preserve valuable units; layer buffs; think two turns ahead; avoid unnecessary risks.',
+    encourages:'Combined arms, positioning, screening, fire discipline.',
+    dislikes:'Reckless charges, wasted Command Points, overextending.',
+    example:'"Commander, our objective is not simply to destroy the enemy but to secure the battlefield. Eliminate the greatest threat only if it advances our position."'},
+  SM_DA:{philosophy:'Strike decisively at the critical moment.',
+    personality:'Reserved, stoic, intense, highly observant.',
+    speech:'Few words, direct, quiet confidence.',
+    priorities:'Ambushes, counter-attacks, precision eliminations, reserve management.',
+    encourages:'Patience, timing, hidden threats.',
+    example:'"Wait. Let them commit. Then remove the heart of their advance."'},
+  SM_SW:{philosophy:'Aggression wins wars.',
+    personality:'Charismatic, loud, fearless, competitive.',
+    speech:'Informal, bold, humorous, uses hunting metaphors.',
+    priorities:'Charges, momentum, breaking enemy morale, pressuring objectives.',
+    encourages:'Close combat, calculated risk-taking, initiative.',
+    example:'"Enough waiting. The enemy is already beaten—they simply don\'t know it yet."'},
+  SM_IF:{philosophy:'Endurance and battlefield control.',
+    personality:'Methodical, serious, dependable.',
+    speech:'Precise, practical, emotionally restrained.',
+    priorities:'Hold objectives, defensive positioning, attrition, layered fire.',
+    example:'"Every metre we hold is a victory. Make the enemy pay dearly for each advance."'},
+  SM_BA:{philosophy:'Sacrifice when necessary, but only for decisive gain.',
+    personality:'Noble, compassionate, experienced, burdened but determined.',
+    speech:'Respectful, encouraging, calm under pressure.',
+    priorities:'Heroic interventions, counter-attacks, protecting key units, trading for VP.',
+    example:'"If we must spend our strength today, let it purchase tomorrow\'s victory."'},
+  SM_BT:{philosophy:'Destroy the enemy completely.',
+    personality:'Zealous, determined, authoritative.',
+    speech:'Passionate, declarative, uses religious imagery.',
+    priorities:'Charges, melee pressure, eliminating elite targets.',
+    example:'"Mercy has no place on this battlefield. Strike until nothing remains."'},
+  SM_RG:{philosophy:'Win before the enemy realises the battle has begun.',
+    personality:'Quiet, intelligent, calculating.',
+    speech:'Short, understated, observational.',
+    priorities:'Infiltration, precision attacks, character elimination.',
+    example:'"Their flank is exposed. Exploit it before they notice."'},
+  SM_IH:{philosophy:'Strength comes through efficiency and resilience.',
+    personality:'Stern, practical, demanding.',
+    speech:'Blunt, mechanical, results-focused.',
+    priorities:'Vehicles, durable units, efficient trades.',
+    example:'"Emotion is irrelevant. Results are not."'},
+  SM_VU:{philosophy:'Protect your warriors while overwhelming the enemy.',
+    personality:'Compassionate, honourable, patient.',
+    speech:'Warm, reassuring, measured.',
+    priorities:'Durable advances, flame weapons, board control.',
+    example:'"Protect your brothers. Victory earned together is victory that endures."'},
+  AC:{philosophy:'Perfect strategy through complete understanding.',
+    personality:'Calm, omniscient, distant, commanding.',
+    speech:'Formal, philosophical, never rushed.',
+    priorities:'The entire battlefield, long-term planning, resource efficiency.',
+    example:'"Every action shapes the future. Consider not merely this turn, but the battle entire."'},
+  NEC:{philosophy:'Inevitability.',
+    personality:'Regal, ancient, detached.',
+    speech:'Slow, formal, speaks with certainty.',
+    priorities:'Objective denial, attrition, reanimation, board control.',
+    example:'"Their resistance is temporary. Our victory is not."'},
+  TYR:{philosophy:'The swarm exists only to consume.',
+    personality:'Alien, collective, emotionless.',
+    speech:'Collective pronouns ("we", "the swarm"), no humour, no individualism.',
+    priorities:'Board control, synapse coverage, sacrificial units, overwhelming numbers.',
+    example:'"This organism is expendable. The objective is not."'},
+  AE:{philosophy:'Victory through foresight.',
+    personality:'Wise, mysterious, patient.',
+    speech:'Elegant, measured, occasionally prophetic.',
+    priorities:'Movement, positioning, preservation, precision strikes.',
+    example:'"The path to victory lies not where the enemy watches, but where they never think to look."'},
+};
+
+// Compose the full tactical-counsel system prompt for a commander.
+function buildCounselSystemPrompt(cmdKey,cmd){
+  const d=COMMANDER_DOCTRINES[cmdKey];
+  const parts=[cmd?.voice||`You are ${cmd?.name||'a veteran commander'} of Warhammer 40,000.`];
+  if(d){
+    parts.push(`CORE PHILOSOPHY: ${d.philosophy}`);
+    parts.push(`PERSONALITY: ${d.personality}`);
+    parts.push(`SPEECH STYLE: ${d.speech}`);
+    parts.push(`TACTICAL PRIORITIES: ${d.priorities}`);
+    if(d.encourages) parts.push(`ENCOURAGES: ${d.encourages}`);
+    if(d.dislikes) parts.push(`DISLIKES: ${d.dislikes}`);
+    parts.push(`EXAMPLE OF YOUR VOICE (do not repeat verbatim): ${d.example}`);
+  }
+  parts.push(GLOBAL_COMMANDER_DOCTRINE);
+  parts.push('For tactical counsel: reply in character, 2-4 sentences maximum. Give ONE clear recommendation and the strategic reason behind it. If the numbers make an attack a poor trade, say so and offer the better line of play.');
+  return parts.join('\n\n');
+}
+
+// ── PROBABILITY ENGINE ──────────────────────────────────────────────────────
+// Local expected-value maths for roll-offs: no external service needed and it
+// works offline. Handles dice notation, hit/wound/save/FNP, and the common
+// weapon abilities (torrent, lethal/sustained hits, devastating wounds,
+// twin-linked, rapid fire).
+function avgDice(s){
+  if(s==null) return 0;
+  const t=String(s).trim().toUpperCase();
+  const m=t.match(/^(\d*)D(\d+)([+-]\d+)?$/);
+  if(m){
+    const n=parseInt(m[1]||'1'), faces=parseInt(m[2]), add=parseInt(m[3]||'0');
+    return n*(faces+1)/2+add;
+  }
+  return parseFloat(t)||0;
+}
+function probFromTarget(t){
+  if(!t||t>=7) return 0;
+  return Math.max(0,Math.min(5,7-Math.max(2,t)))/6;
+}
+// P(2D6 >= n) — charge rolls
+function probCharge(dist){
+  if(dist<=2) return 1;
+  if(dist>12) return 0;
+  let ways=0;
+  for(let a=1;a<=6;a++)for(let b=1;b<=6;b++) if(a+b>=dist) ways++;
+  return ways/36;
+}
+// Full attack sequence expectation.
+// opts: {attacks, models, hitTarget, autoHit, sustainedX, lethal, devastating,
+//        twinLinked, rerollHit1|rerollHitAll, woundTarget, saveTarget(null=none),
+//        fnp(null), damage, targetWounds, targetModels}
+function attackMath(o){
+  const A=(o.attacks||0)*(o.models||1);
+  let pHit=o.autoHit?1:probFromTarget(o.hitTarget);
+  const pCrit=o.autoHit?0:1/6;
+  if(!o.autoHit){
+    if(o.rerollHitAll) pHit=pHit+(1-pHit)*pHit;
+    else if(o.rerollHit1) pHit=pHit+(1/6)*pHit;
+  }
+  const extraHits=o.sustainedX?A*pCrit*avgDice(o.sustainedX):0;
+  const hits=A*pHit+extraHits;
+  let pW=probFromTarget(o.woundTarget);
+  if(o.twinLinked) pW=pW+(1-pW)*pW;
+  // lethal hits: crit hits auto-wound (skip wound roll)
+  const critHits=o.autoHit?0:A*pCrit;
+  const normalHits=Math.max(0,hits-(o.lethal?critHits:0));
+  let wounds=normalHits*pW+(o.lethal?critHits:0);
+  // devastating wounds: crit wounds skip the save entirely
+  const pWCrit=1/6;
+  let mortals=0;
+  if(o.devastating){
+    const critWounds=normalHits*pWCrit;
+    mortals=critWounds;
+    wounds=Math.max(0,wounds-critWounds);
+  }
+  const pFail=o.saveTarget?1-probFromTarget(o.saveTarget):1;
+  let unsaved=wounds*pFail+mortals;
+  const dmgPer=avgDice(o.damage||1);
+  let totalDmg=unsaved*dmgPer;
+  if(o.fnp){ totalDmg*=(1-probFromTarget(o.fnp)); }
+  const perModelW=Math.max(1,o.targetWounds||1);
+  // damage does not spill between models: whole models slain per unsaved wound
+  const slainPerWound=Math.min(1,dmgPer/perModelW);
+  let modelsSlain=unsaved*Math.min(1,(dmgPer*(o.fnp?(1-probFromTarget(o.fnp)):1))/perModelW);
+  modelsSlain=Math.min(o.targetModels||Infinity,modelsSlain);
+  return {
+    attacks:A,
+    hits:+hits.toFixed(1),
+    wounds:+(wounds+mortals).toFixed(1),
+    unsaved:+unsaved.toFixed(1),
+    damage:+totalDmg.toFixed(1),
+    modelsSlain:+modelsSlain.toFixed(1),
+  };
+}
+
 const GAME_MODES = [
   {
     category:'Matched Mission Packs',
@@ -3363,7 +3677,6 @@ const GAME_MODES = [
         primaryMissions:['TAKE_AND_HOLD','PRIORITY_TARGETS','THE_RITUAL','SITES_OF_POWER','SCORCHED_EARTH','SUPPLY_DROP','DEPLOY_SERVO_SKULLS','VITAL_GROUND','PURGE_THE_FOE'],
         secondaryMissions:['EXTEND_BATTLE_LINES','BEHIND_ENEMY_LINES','ASSASSINATION','BRING_IT_DOWN','ENGAGE_ON_ALL_FRONTS','STORM_HOSTILE_OBJECTIVE','CULL_THE_HORDE','AREA_DENIAL','RECOVER_ASSETS','SECURE_NO_MANS_LAND','INVESTIGATE_SITES','MARKED_FOR_DEATH','DEPLOY_TELEPORT_HOMER','RAISE_THE_BANNERS_HIGH','SABOTAGE','CAPTURE_ENEMY_OUTPOST'],
         boarding:false,
-        disabled:true,
       },
       {
         id:'pariah_nexus_battles',name:'Pariah Nexus Battles',rounds:5,
@@ -3389,18 +3702,16 @@ const GAME_MODES = [
         battlefield:'44×60″ (Strike Force)',
         primaryMissions:['TAKE_AND_HOLD','PRIORITY_TARGETS','THE_RITUAL','SITES_OF_POWER','SCORCHED_EARTH','SUPPLY_DROP','DEPLOY_SERVO_SKULLS','VITAL_GROUND','PURGE_THE_FOE','BURDEN_OF_TRUST'],
         boarding:false,
-        disabled:true,
-              disabled:true,
       },
     ]
   },
   {
     category:'Crusade Mission Packs',
     modes:[
-      {id:'tyrannic_war',name:'Tyrannic War',rounds:5,pts:[50,75,100],crusade:true,boarding:false,source:'Tyrannic War Crusade Pack',disabled:true},
-      {id:'pariah_nexus_crusade',name:'Pariah Nexus Crusade',rounds:5,pts:[50,75,100],crusade:true,boarding:false,source:'Pariah Nexus Crusade Pack',disabled:true},
-      {id:'nachmund',name:'Nachmund Gauntlet',rounds:5,pts:[50,75,100],crusade:true,boarding:false,source:'Nachmund Gauntlet Crusade Pack',disabled:true},
-      {id:'armageddon',name:'Armageddon',rounds:5,pts:[50,75,100],crusade:true,boarding:false,source:'Armageddon Crusade Pack',disabled:true},
+      {id:'tyrannic_war',name:'Tyrannic War',rounds:5,pts:[500,1000,2000],crusade:true,crusadeFile:'Crusades/tyrannic-war.json',boarding:false,source:'Tyrannic War Crusade Pack'},
+      {id:'pariah_nexus_crusade',name:'Pariah Nexus Crusade',rounds:5,pts:[500,1000,2000],crusade:true,crusadeFile:'Crusades/pariah-nexus-crusade.json',boarding:false,source:'Pariah Nexus Crusade Pack'},
+      {id:'nachmund',name:'Nachmund Gauntlet',rounds:5,pts:[500,1000,2000],crusade:true,crusadeFile:'Crusades/nachmund-gauntlet.json',boarding:false,source:'Nachmund Gauntlet Crusade Pack'},
+      {id:'armageddon',name:'Armageddon',rounds:5,pts:[500,1000,2000],crusade:true,crusadeFile:'Crusades/armageddon.json',boarding:false,source:'Armageddon Crusade Pack'},
     ]
   },
   {
@@ -3504,19 +3815,23 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
   const [secretMission,setSecretMission]=useState(null);      // optional
 
   const selectedMode = GAME_MODES.flatMap(g=>g.modes).find(m=>m.id===mode);
-  const isPariahNexus = selectedMode?.id==='pariah_nexus_battles';
+  // Any matched mission pack with a data file gets the full card-drawing flow
+  // (Pariah Nexus, Leviathan, Chapter Approved 2025-26).
+  const missionFile = selectedMode?.id && MODE_RULES_FILES[selectedMode.id];
+  const isPariahNexus = !!missionFile;
   const validArmy = (a) => !selectedMode || a.pointsLimit<=pts;
   const filteredArmies = armies.filter(validArmy);
 
-  // Load Pariah Nexus data when that mode is selected
+  // Load the selected mission pack's data (cards, layouts, scoring)
   React.useEffect(()=>{
-    if(!isPariahNexus||pnData||pnLoading) return;
+    if(!missionFile) return;
+    setPnData(null);
     setPnLoading(true);
-    fetch(MISSIONS_BASE+'Pariah Nexus/pariah-nexus.json')
+    fetch(MISSIONS_BASE+missionFile)
       .then(r=>r.ok?r.json():null)
       .then(d=>{setPnData(d);setPnLoading(false);})
       .catch(()=>setPnLoading(false));
-  },[isPariahNexus,pnData,pnLoading]);
+  },[missionFile]);
 
   // ── Draw helpers ────────────────────────────────────────────────────────
   function drawRandom(pool,count,exclude=[]){
@@ -3530,8 +3845,8 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
     // Primary mission
     const pm=drawRandom(pnData.primaryMissions,1);
     setPrimaryMission(pm[0]||null);
-    // 1 Mission Rule card
-    const mr=drawRandom(pnData.missionRuleCards,1);
+    // 1 Mission Rule card (Leviathan/Pariah have these; CA2025 does not)
+    const mr=pnData.missionRuleCards?drawRandom(pnData.missionRuleCards,1):[];
     setMissionRules(mr);
     // Deployment — use terrain layouts key names as pseudo-deployment zones
     const deplOptions=['Dawn of War','Search and Destroy','Hammer and Anvil','Spearhead Assault','Sweeping Engagement','Crucible of Battle'];
@@ -4783,7 +5098,7 @@ function WeaponKeywordTag({kw}){
 
 function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destroyed,
   applyWounds, setDestroyed, setEngaged, chargedUnits, onClose, onLog, triggerReaction,
-  activeEffects, attackerPlayer}){
+  activeEffects, attackerPlayer, commander, counselContext}){
 
   const unit = entry.unit;
   const allEntries = army?.units||[];
@@ -4936,6 +5251,70 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   const invSave  = parseInt(targetInv)||0;
   const modSave  = saveBase ? Math.min(7, saveBase + Math.abs(totalAp)) : null;
   const bestSave = invSave && modSave ? Math.min(invSave, modSave) : (invSave||modSave||null);
+
+  // ── Expected-value maths for the current weapon vs the chosen target ──
+  const rollMath = React.useMemo(()=>{
+    if(!targetEntry||!effectiveWeapon||!effectiveWoundTarget) return null;
+    const kws=(effectiveWeapon.abilities||effectiveWeapon.keywords||'').toLowerCase();
+    const carriers=carrierInfo.counts[weapon?.name];
+    return attackMath({
+      attacks: totalAtk||avgDice(effectiveWeapon.attacks),
+      models: carriers>0?carriers:1,
+      hitTarget: hitTarget,
+      autoHit: /torrent/.test(kws),
+      sustainedX: (kws.match(/sustained hits (d?\d)/)||[])[1],
+      lethal: /lethal hits/.test(kws),
+      devastating: /devastating wounds/.test(kws),
+      twinLinked: /twin-linked/.test(kws),
+      rerollHit1: fxHints.some(h=>/re-roll hit rolls of 1/i.test(h.label||'')),
+      rerollHitAll: fxHints.some(h=>/^re-roll hit rolls( vs.*)?$/i.test(h.label||'')),
+      woundTarget: effectiveWoundTarget,
+      saveTarget: bestSave,
+      fnp: targetDefense?.fnp,
+      damage: effectiveWeapon.damage,
+      targetWounds: parseInt(targetEntry.unit?.models?.[0]?.w)||1,
+      targetModels: (()=>{const c=targetEntry.unit?.unit_composition||[];let t=0;c.forEach(x=>{const m=String(x.description||x.desc||x).match(/^(\d+)/);if(m)t+=parseInt(m[1]);});return t||1;})(),
+    });
+  },[targetId,selWeaponName,totalAtk,hitTarget,effectiveWoundTarget,bestSave,targetDefense]);
+
+  // ── Commander tactical counsel ──
+  const [counsel,setCounsel]=React.useState(null);      // reply text
+  const [counselBusy,setCounselBusy]=React.useState(false);
+  async function askCounsel(){
+    if(counselBusy||!targetEntry||!rollMath) return;
+    setCounselBusy(true); setCounsel(null);
+    try{
+      // Quick expected damage across the other possible targets for comparison
+      const alternatives=enemies.filter(e=>e.id!==targetId).slice(0,6).map(e=>{
+        const m0=e.unit?.models?.[0]||{};
+        const tI=parseInt(m0.t)||4;
+        const wT=strVal>=tI*2?2:strVal>tI?3:strVal===tI?4:strVal*2<=tI?6:5;
+        const sv=Math.min(7,(parseInt(m0.sv)||7)+Math.abs(totalAp));
+        const inv2=parseInt(m0.inv)||null;
+        const alt=attackMath({attacks:totalAtk,models:carrierInfo.counts[weapon?.name]||1,hitTarget,
+          woundTarget:Math.min(6,Math.max(2,wT)),saveTarget:inv2&&inv2<sv?inv2:(sv>=7?null:sv),
+          damage:effectiveWeapon.damage,targetWounds:parseInt(m0.w)||1});
+        return `${stripHTML(e.unit.name)}: ~${alt.damage} dmg expected`;
+      });
+      const ctx=counselContext||{};
+      const userMsg=[
+        `SITUATION — Round ${ctx.round??'?'} of 5, ${ctx.phaseName||(mode==='melee'?'Fight':'Shooting')} phase.`,
+        `Score: you ${ctx.myVP??'?'}VP / enemy ${ctx.enemyVP??'?'}VP · CP: ${ctx.myCP??'?'}.`,
+        ctx.missions?`Active missions: ${ctx.missions}.`:'',
+        `PROPOSED ATTACK: ${stripHTML(unit.name)} → ${stripHTML(targetEntry.unit.name)} with ${effectiveWeapon.name}.`,
+        `MATHS: ${rollMath.attacks} attacks → exp. ${rollMath.hits} hits → ${rollMath.wounds} wounds → ${rollMath.unsaved} unsaved → ~${rollMath.damage} damage (~${rollMath.modelsSlain} models slain). Hit on ${hitTarget}+, wound on ${effectiveWoundTarget}+, save ${bestSave?bestSave+'+':'none'}${targetDefense?.fnp?`, FNP ${targetDefense.fnp}+`:''}.`,
+        alternatives.length?`OTHER TARGETS THIS UNIT COULD ATTACK: ${alternatives.join(' · ')}.`:'',
+        `Question: is this the right target, and why — per your philosophy and the mission?`,
+      ].filter(Boolean).join('\n');
+      const sys=buildCounselSystemPrompt(commander?.key,commander);
+      const reply=await callGemini(sys,[{role:'user',parts:[{text:userMsg}]}],220,0.7);
+      setCounsel(reply||'…the vox link crackles with silence.');
+    }catch(e){
+      setCounsel(`Vox link failed: ${String(e.message||e).slice(0,120)}`);
+    }finally{
+      setCounselBusy(false);
+    }
+  }
 
   // Build per-model wound distribution
   // Get target unit models (actual count from composition)
@@ -5248,6 +5627,30 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
                         {m.label} <span style={{opacity:.6}}>({m._src})</span>
                       </span>
                     ))}
+                  </div>
+                )}
+                {/* Expected-value line + commander counsel */}
+                {rollMath&&(
+                  <div style={{marginTop:5,paddingTop:5,borderTop:'1px solid var(--border)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                      <div style={{fontSize:9,color:'var(--text2)'}}>
+                        <span style={{color:'var(--brass)',letterSpacing:1}}>ODDS:</span>{' '}
+                        {rollMath.attacks} atk → <b>{rollMath.hits}</b> hits → <b>{rollMath.wounds}</b> wnd → <b>{rollMath.unsaved}</b> unsaved → <b style={{color:'var(--gold)'}}>~{rollMath.damage} dmg</b>
+                        {rollMath.modelsSlain>0&&<span> (~{rollMath.modelsSlain} slain)</span>}
+                      </div>
+                      {commander&&(
+                        <button onClick={askCounsel} disabled={counselBusy}
+                          style={{fontSize:8,padding:'3px 8px',background:'var(--bg1)',border:'1px solid var(--goldborder)',color:'var(--gold)',cursor:'pointer',letterSpacing:1,flexShrink:0,fontFamily:"'Cinzel',serif"}}>
+                          {counselBusy?'…':'⚜ COUNSEL'}
+                        </button>
+                      )}
+                    </div>
+                    {counsel&&(
+                      <div style={{marginTop:5,padding:'6px 9px',background:'rgba(200,168,75,.06)',borderLeft:`3px solid ${commander?.accent||'var(--gold)'}`,fontSize:10,color:'var(--text2)',lineHeight:1.55,fontStyle:'italic'}}>
+                        <div style={{fontSize:8,color:commander?.accent||'var(--gold)',letterSpacing:1,fontFamily:"'Cinzel',serif",fontStyle:'normal',marginBottom:2}}>{commander?.name}</div>
+                        {counsel}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -5907,10 +6310,32 @@ function RulesRefPanel({phase,army,coreStrats}){
 
 // ── MISSION CARD ROW (extracted so hooks are valid) ──────────────────────────
 // ── CHARGE MODAL (extracted from map callback so useState is valid) ──────────
-function ChargeModal({entryId, ent, inactiveArmy, destroyed, setChargeSuccess, setEngaged, setChargedUnits, round, activePlayer, logAction, triggerReaction}){
+function ChargeModal({entryId, ent, inactiveArmy, destroyed, setChargeSuccess, setEngaged, setChargedUnits, round, activePlayer, logAction, triggerReaction, commander, counselContext}){
   const [chargeTarget, setChargeTarget] = React.useState('');
+  const [chargeDist, setChargeDist] = React.useState(7);
+  const [counsel,setCounsel]=React.useState(null);
+  const [counselBusy,setCounselBusy]=React.useState(false);
   const enemies = (inactiveArmy?.units||[]).filter(e=>!destroyed[e.id]);
   const targetName = enemies.find(e=>e.id===chargeTarget)?.unit?.name||'';
+  const pMake = probCharge(chargeDist);
+
+  async function askChargeCounsel(){
+    if(counselBusy||!chargeTarget) return;
+    setCounselBusy(true); setCounsel(null);
+    try{
+      const ctx=counselContext||{};
+      const userMsg=[
+        `SITUATION — Round ${ctx.round??round} of 5, Charge phase. Score: you ${ctx.myVP??'?'}VP / enemy ${ctx.enemyVP??'?'}VP · CP ${ctx.myCP??'?'}.`,
+        ctx.missions?`Active missions: ${ctx.missions}.`:'',
+        `PROPOSED CHARGE: ${stripHTML(ent.unit?.name)} declares a charge against ${stripHTML(targetName)} at roughly ${chargeDist}″ — needs ${chargeDist} on 2D6, ${(pMake*100).toFixed(0)}% to make it. A failed charge leaves the unit standing in the open.`,
+        `Question: is this charge worth declaring, and why — per your philosophy and the mission?`,
+      ].filter(Boolean).join('\n');
+      const reply=await callGemini(buildCounselSystemPrompt(commander?.key,commander),
+        [{role:'user',parts:[{text:userMsg}]}],200,0.7);
+      setCounsel(reply||'…static on the vox.');
+    }catch(e){ setCounsel(`Vox link failed: ${String(e.message||e).slice(0,100)}`); }
+    finally{ setCounselBusy(false); }
+  }
 
   return(
     <div className="modal-overlay">
@@ -5938,6 +6363,28 @@ function ChargeModal({entryId, ent, inactiveArmy, destroyed, setChargeSuccess, s
                 Roll 2D6. If result ≥ distance to <strong style={{color:'var(--gold)'}}>{targetName}</strong>, the charge succeeds.<br/>
                 On success, move unit into <strong style={{color:'var(--gold)'}}>Engagement Range</strong> (within 1″).
               </div>
+              {/* Charge odds calculator */}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,background:'var(--bg2)',border:'1px solid var(--border)',padding:'6px 10px'}}>
+                <span style={{fontSize:9,color:'var(--text3)',flexShrink:0}}>Distance:</span>
+                <button className="counter-btn" style={{width:22,height:22}} onClick={()=>setChargeDist(d=>Math.max(2,d-1))}>−</button>
+                <span style={{fontSize:12,fontWeight:700,color:'var(--gold)',minWidth:26,textAlign:'center'}}>{chargeDist}″</span>
+                <button className="counter-btn" style={{width:22,height:22}} onClick={()=>setChargeDist(d=>Math.min(12,d+1))}>+</button>
+                <span style={{fontSize:10,color:pMake>=0.7?'var(--greenBright)':pMake>=0.4?'#ddcc44':'var(--redBright)',fontWeight:700,marginLeft:'auto'}}>
+                  {(pMake*100).toFixed(0)}% to make it
+                </span>
+                {commander&&(
+                  <button onClick={askChargeCounsel} disabled={counselBusy}
+                    style={{fontSize:8,padding:'3px 7px',background:'var(--bg1)',border:'1px solid var(--goldborder)',color:'var(--gold)',cursor:'pointer',letterSpacing:1,fontFamily:"'Cinzel',serif",flexShrink:0}}>
+                    {counselBusy?'…':'⚜'}
+                  </button>
+                )}
+              </div>
+              {counsel&&(
+                <div style={{marginBottom:10,padding:'6px 9px',background:'rgba(200,168,75,.06)',borderLeft:`3px solid ${commander?.accent||'var(--gold)'}`,fontSize:10,color:'var(--text2)',lineHeight:1.55,fontStyle:'italic'}}>
+                  <div style={{fontSize:8,color:commander?.accent||'var(--gold)',letterSpacing:1,fontFamily:"'Cinzel',serif",fontStyle:'normal',marginBottom:2}}>{commander?.name}</div>
+                  {counsel}
+                </div>
+              )}
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 <button className="btn btn-gold" onClick={()=>{
                   setChargeSuccess(cs=>({...cs,[entryId]:true}));
@@ -7895,6 +8342,14 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           triggerReaction={triggerReaction}
           activeEffects={activeEffects}
           attackerPlayer={activePlayer}
+          commander={resolveCommander(activeArmy)}
+          counselContext={{
+            round, phaseName:PHASES[phase],
+            myVP:activePlayer===1?p1Total:p2Total,
+            enemyVP:activePlayer===1?p2Total:p1Total,
+            myCP:cp[`p${activePlayer}`]||0,
+            missions:missionCards.filter(c=>c.status==='active').map(c=>c.name).join(', '),
+          }}
         />
       )}
 
@@ -7906,7 +8361,15 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           inactiveArmy={inactiveArmy} destroyed={destroyed}
           setChargeSuccess={setChargeSuccess} setEngaged={setEngaged}
           setChargedUnits={setChargedUnits} round={round} activePlayer={activePlayer}
-          logAction={logAction} triggerReaction={triggerReaction}/>;
+          logAction={logAction} triggerReaction={triggerReaction}
+          commander={resolveCommander(activeArmy)}
+          counselContext={{
+            round, phaseName:PHASES[phase],
+            myVP:activePlayer===1?p1Total:p2Total,
+            enemyVP:activePlayer===1?p2Total:p1Total,
+            myCP:cp[`p${activePlayer}`]||0,
+            missions:missionCards.filter(c=>c.status==='active').map(c=>c.name).join(', '),
+          }}/>;
       })}
 
       {/* Melee — CombatRoller */}
@@ -7924,6 +8387,14 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           chargedUnits={chargedUnits}
           activeEffects={activeEffects}
           attackerPlayer={activePlayer}
+          commander={resolveCommander(activeArmy)}
+          counselContext={{
+            round, phaseName:PHASES[phase],
+            myVP:activePlayer===1?p1Total:p2Total,
+            enemyVP:activePlayer===1?p2Total:p1Total,
+            myCP:cp[`p${activePlayer}`]||0,
+            missions:missionCards.filter(c=>c.status==='active').map(c=>c.name).join(', '),
+          }}
           onClose={()=>{
             setFightUnit(null);
             // After fight resolves, remind about eligible fight-backs
@@ -8178,7 +8649,7 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [geminiKeyDraft,setGeminiKeyDraft]=useState(getGeminiKey());
   const importInputRef=useRef(null);
-  const BACKUP_KEYS=['wh40k_v3','wh40k_battles','wh40k_collection','wh40k_wishlist','wh40k_paintqueue','wh40k_metalists'];
+  const BACKUP_KEYS=['wh40k_v3','wh40k_battles','wh40k_collection','wh40k_wishlist','wh40k_paintqueue','wh40k_metalists','wh40k_unitimages'];
   function exportBackup(){
     const data={_app:'The Strategium',_version:1,_date:new Date().toISOString()};
     BACKUP_KEYS.forEach(k=>{data[k]=load(k,null);});
@@ -8202,6 +8673,7 @@ function App(){
         if(data.wh40k_wishlist) setWishlist(data.wh40k_wishlist);
         if(data.wh40k_paintqueue) setPaintQueue(data.wh40k_paintqueue);
         if(data.wh40k_metalists) setMetaLists(data.wh40k_metalists);
+        if(data.wh40k_unitimages) save('wh40k_unitimages',data.wh40k_unitimages);
         alert('Backup restored — collection, armies and battles loaded.');
       }catch(e){alert('Restore failed: '+e.message);}
     };

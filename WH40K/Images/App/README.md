@@ -18,7 +18,7 @@ filename in this folder, commit, then delete the entries in `ART_OVERRIDES`:
 | `menu-aos-table.jpg` | AoS war-council table still (menu poster) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_024527_5417d391-0fad-4d63-b2dc-72fdbd77e73d.png |
 | `menu-40k-loop.mp4` | 40k menu looping table video (5s, 720×1280) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025128_da4d9580-0e6b-4e09-8dbd-285230f1ee20.mp4 |
 | `menu-aos-loop.mp4` | AoS menu looping table video (5s, 720×1280) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025200_81353701-7bd3-44d9-9f54-fd5422372e9d.mp4 |
-| `transition-40k-aos.mp4` | Table-flip transition 40k→AoS (10s) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025151_f77ebace-a953-4508-80d1-4523578a42a0.mp4 |
+| `transition-40k-aos.mp4` | Table-flip transition 40k→AoS v2 — all marines leave, full transform (10s) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_134730_44f56e0d-cde2-4a44-8ee2-148c39ff289c.mp4 |
 
 Tip: the PNGs are ~1-2 MB each — re-saving them as JPG (quality ~80) before
 committing keeps the app fast on mobile data.
