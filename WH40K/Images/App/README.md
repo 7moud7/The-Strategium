@@ -13,7 +13,12 @@ filename in this folder, commit, then delete the entries in `ART_OVERRIDES`:
 | `war-banner.jpg` | War pillar card banner | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260705_222226_23f6e605-9378-4884-bf10-a1367ea30c1e.png |
 | `armoury-banner.jpg` | Armoury pillar card banner | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260705_222234_129236fa-3f55-4820-9336-14e0363637cb.png |
 | `collection-banner.jpg` | Collection pillar card banner | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260705_222242_56d6fece-31ff-4651-a12d-342f241cdce9.png |
-| `menu-ambient.mp4` | Ambient menu video (5s loop, 720×1280) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260705_222427_d34f6051-5d87-419d-8528-d9abc213163d.mp4 |
+| `menu-ambient.mp4` | (superseded) war-room ambient loop | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260705_222427_d34f6051-5d87-419d-8528-d9abc213163d.mp4 |
+| `menu-40k-table.jpg` | 40k war-council table still (menu poster) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_024516_1de3e9cc-cf4b-4ab7-9c4b-fea0f03e9a9c.png |
+| `menu-aos-table.jpg` | AoS war-council table still (menu poster) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_024527_5417d391-0fad-4d63-b2dc-72fdbd77e73d.png |
+| `menu-40k-loop.mp4` | 40k menu looping table video (5s, 720×1280) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025128_da4d9580-0e6b-4e09-8dbd-285230f1ee20.mp4 |
+| `menu-aos-loop.mp4` | AoS menu looping table video (5s, 720×1280) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025200_81353701-7bd3-44d9-9f54-fd5422372e9d.mp4 |
+| `transition-40k-aos.mp4` | Table-flip transition 40k→AoS (10s) | https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025151_f77ebace-a953-4508-80d1-4523578a42a0.mp4 |
 
 Tip: the PNGs are ~1-2 MB each — re-saving them as JPG (quality ~80) before
 committing keeps the app fast on mobile data.
