@@ -428,6 +428,32 @@ input::placeholder{color:var(--text3)}
 /* Nav active highlight */
 .nav-opt-active{background:var(--golddim) !important;border-color:var(--gold) !important;}
 .empty-icon{font-size:32px;opacity:.4;margin-bottom:4px}
+/* Home button — was easy to miss at 11px in a corner; now a clear gold-ringed
+   icon button that reads as "home" at a glance. */
+.btn-home{
+  width:34px;height:34px;flex-shrink:0;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;line-height:1;color:var(--gold);
+  background:var(--bg2);border:1px solid var(--goldborder);border-radius:50%;
+  transition:all .15s;
+}
+.btn-home:hover{background:var(--golddim);border-color:var(--gold);transform:scale(1.06);}
+.btn-home:active{transform:scale(.92);}
+/* Commander tab — was visually identical to the other tabs; the Commander
+   is a headline feature, so give it a standing gold pill instead of a
+   plain text tab. */
+.tab-commander{
+  padding:6px 12px !important;margin-left:auto;
+  background:var(--golddim);border:1px solid var(--gold) !important;
+  border-radius:14px;color:var(--gold) !important;
+  font-weight:700;letter-spacing:1.5px !important;
+}
+.tab-commander.active{background:var(--gold);color:var(--bg0) !important;}
+.tab-commander{animation:cmdPulse 2.4s ease-in-out infinite;}
+@keyframes cmdPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(200,168,75,.35);}
+  50%{box-shadow:0 0 8px 2px rgba(200,168,75,.35);}
+}
 
 /* ── ERROR BOX ── */
 .error-box{background:var(--reddim);border:1px solid var(--red);color:var(--redBright);padding:10px 14px;font-size:11px;letter-spacing:.5px}
@@ -717,8 +743,7 @@ const IMAGES_INDEX_URL='https://raw.githubusercontent.com/7moud7/The-Strategium/
 let IMAGES_INDEX=null;
 async function loadImagesIndex(){
   if(IMAGES_INDEX) return IMAGES_INDEX;
-  try{ const r=await fetch(IMAGES_INDEX_URL); IMAGES_INDEX=r.ok?await r.json():{}; }
-  catch(e){ IMAGES_INDEX={}; }
+  IMAGES_INDEX=(await fetchRepoJSON('WH40K/Data/images-index.json'))||{};
   return IMAGES_INDEX;
 }
 function getUnitImageMap(){ try{return JSON.parse(localStorage.getItem('wh40k_unitimages'))||{};}catch(e){return {};} }
@@ -745,6 +770,19 @@ async function geminiIdentifyImage(b64,mime,unitNames){
 // Warscroll JSON converted from the BSData age-of-sigmar-4th catalogues
 // (see AoS/Data/ in the repo). Same fetch-and-cache pattern as 40k data.
 const AOS_DATA_BASE='https://raw.githubusercontent.com/7moud7/The-Strategium/main/AoS/Data/';
+// Data added on the dev branch isn't on `main` until merged — this helper
+// tries main first, then falls back to the dev branch, so the app works
+// before AND after the merge.
+const REPO_BRANCHES=['main','claude/wh40k-rules-comprehension-3mcajp'];
+async function fetchRepoJSON(pathInRepo){
+  for(const br of REPO_BRANCHES){
+    try{
+      const r=await fetch(`https://raw.githubusercontent.com/7moud7/The-Strategium/${br}/${pathInRepo}`);
+      if(r.ok) return await r.json();
+    }catch(e){}
+  }
+  return null;
+}
 
 // ── GEMINI CONFIG ──────────────────────────────────────────────────────────
 // The key is NOT stored in this file (it lives in a public GitHub repo).
@@ -1363,6 +1401,9 @@ ONE sentence. Blunt. Commercial. Deeply principled.`,
   QI:{
     name:"Canis Rex — Sir Hektur",title:"The Chainbreaker · Freeblade Knight",
     img:IMG_BASE+"Canis%20Rex.webp",
+    imgPos:"center center", // this portrait is a square crop, not a tall bust shot —
+                            // "center top" (the default for the other commanders) cropped in too tight
+
     personality:"Bold · Chivalric · Freedom-loving · Anti-tyranny heroism",
     voice:`You are Sir Hektur, pilot of Canis Rex the Chainbreaker, a legendary Freeblade Knight who fights for the freedom of the oppressed. You speak with the booming formal honour-codes of a Knight Preceptor with a fierce rebellious streak against all tyrants. Address the player as 'Scion'.
 - VP: "Honour is satisfied. This position is freed from the enemy's grasp."
@@ -1678,7 +1719,7 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
         <div style={{position:'relative',flexShrink:0,background:cmd.colour||'var(--bg1)',borderBottom:'1px solid var(--border)'}}>
           {cmd.img&&(
             <img src={cmd.img} alt={cmd.name} style={{
-              width:'100%',height:220,objectFit:'cover',objectPosition:'center 15%',
+              width:'100%',height:220,objectFit:'cover',objectPosition:cmd.imgPos||'center 15%',
               display:'block',opacity:.92,
               maskImage:'linear-gradient(to bottom,black 65%,transparent 100%)',
               WebkitMaskImage:'linear-gradient(to bottom,black 65%,transparent 100%)',
@@ -1951,6 +1992,130 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
   );
 }
 
+// ── REFERENCE ARCHIVE ────────────────────────────────────────────────────────
+// Core Rules · Weapon Keywords · Core Stratagems · Key Definitions, all in one
+// browsable screen. Fixes a crash: the main menu's "Reference Archive" pillar
+// pointed at this component, but it had never actually been built.
+function ReferenceArchiveScreen({coreStrats,onBack}){
+  const [tab,setTab]=React.useState('rules');
+  const [core,setCore]=React.useState(null);
+  const [openPhase,setOpenPhase]=React.useState('command');
+  React.useEffect(()=>{ fetchRepoJSON('WH40K/Rules/core-rules.json').then(setCore); },[]);
+
+  const PHASE_TABS=[
+    ['command','Command'],['movement','Movement'],['shooting','Shooting'],
+    ['charge','Charge'],['fight','Fight'],
+  ];
+
+  return(<>
+    <div className="topbar">
+      <button className="btn-home" onClick={onBack} title="Main Menu">⌂</button>
+      <span className="topbar-title">Reference Archive</span>
+      <div/>
+    </div>
+    <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
+      {[['rules','Core Rules'],['keywords','Weapon Keywords'],['strats','Stratagems'],['defs','Definitions']].map(([k,l])=>(
+        <div key={k} className={`tab ${tab===k?'active':''}`} onClick={()=>setTab(k)} style={{whiteSpace:'nowrap'}}>{l}</div>
+      ))}
+    </div>
+    <div className="content">
+      {tab==='rules'&&(!core?(
+        <div className="loading"><div className="spinner"/></div>
+      ):(
+        <div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+            {PHASE_TABS.map(([k,l])=>(
+              <button key={k} className={`btn btn-sm ${openPhase===k?'btn-gold':'btn-outline'}`} onClick={()=>setOpenPhase(k)}>{l}</button>
+            ))}
+          </div>
+          {(()=>{
+            const q=core.phaseQuickRef?.[openPhase];
+            if(!q) return <div style={{color:'var(--text3)',fontSize:11}}>No quick reference for this phase.</div>;
+            return(
+              <div style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',borderLeft:'3px solid var(--gold)',padding:'12px 14px',marginBottom:14}}>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:12,color:'var(--gold)',letterSpacing:1,marginBottom:8,textTransform:'uppercase'}}>{PHASE_TABS.find(p=>p[0]===openPhase)[1]} Phase</div>
+                {q.bothPlayersDo?.length>0&&(<>
+                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,textTransform:'uppercase',marginBottom:3}}>Both Players</div>
+                  {q.bothPlayersDo.map((t,i)=><div key={i} style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>• {t}</div>)}
+                </>)}
+                {q.youDo?.length>0&&(<>
+                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,textTransform:'uppercase',margin:'8px 0 3px'}}>Active Player</div>
+                  {q.youDo.map((t,i)=><div key={i} style={{fontSize:11,color:'var(--text2)',marginBottom:4}}>• {t}</div>)}
+                </>)}
+              </div>
+            );
+          })()}
+          <div className="section-label" style={{marginTop:0}}>Attack Sequence</div>
+          {(core.attackSequence||[]).map((step,i)=>(
+            <div key={i} style={{display:'flex',gap:8,padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+              <div style={{width:18,flexShrink:0,fontFamily:"'Cinzel',serif",color:'var(--gold)',fontSize:11}}>{i+1}</div>
+              <div style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{typeof step==='string'?step:step.name||step.step||JSON.stringify(step)}</div>
+            </div>
+          ))}
+        </div>
+      ))}
+
+      {tab==='keywords'&&(
+        <div>
+          {Object.entries(WEAPON_KW_EXPLANATIONS).map(([kw,ex])=>(
+            <div key={kw} style={{background:'var(--bg1)',border:'1px solid var(--border)',padding:'8px 12px',marginBottom:5}}>
+              <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',marginBottom:2}}>{kw}</div>
+              <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.5}}>{ex}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==='strats'&&(
+        (coreStrats||[]).length===0?<div style={{color:'var(--text3)',fontSize:11,textAlign:'center',padding:20,lineHeight:1.6}}>Universal Core Stratagems have not been added to the rules data yet — this tab will populate automatically once WH40K/Rules/core-rules.json includes them.<br/><br/>Detachment-specific stratagems are already available per-army under The Armoury → your army → Stratagems.</div>:
+        <div>
+          {coreStrats.map((s,i)=>(
+            <StratCard key={i} s={s}/>
+          ))}
+        </div>
+      )}
+
+      {tab==='defs'&&(
+        <div>
+          {[
+            {a:'M',l:'Movement',d:'How far the unit can move in inches per turn'},
+            {a:'T',l:'Toughness',d:'Resistance to wounds — compared against weapon Strength'},
+            {a:'SV',l:'Save',d:'Armour save value — roll equal to or higher to negate a wound'},
+            {a:'W',l:'Wounds',d:'Number of wounds before the model is destroyed'},
+            {a:'LD',l:'Leadership',d:'Used for Battle-shock tests at the end of each phase'},
+            {a:'OC',l:'Objective Control',d:'How much this unit contributes to controlling objectives'},
+            {a:'BS',l:'Ballistic Skill',d:'Ranged attack accuracy — roll equal to or higher to hit'},
+            {a:'WS',l:'Weapon Skill',d:'Melee attack accuracy — roll equal to or higher to hit'},
+            {a:'A',l:'Attacks',d:'Number of attack dice rolled per model in combat'},
+            {a:'S',l:'Strength',d:'Weapon strength — compared against target Toughness to wound'},
+            {a:'AP',l:'Armour Penetration',d:'Reduces target armour save. AP-1 means save is 1 worse'},
+            {a:'D',l:'Damage',d:'Wounds dealt per successful, unsaved wound'},
+            {a:'INV',l:'Invulnerable Save',d:'Always available regardless of AP — cannot be modified'},
+            {a:'FNP',l:'Feel No Pain',d:'Roll after wound allocated — success negates the wound'},
+          ].map(({a,l,d})=>(
+            <div key={a} style={{display:'flex',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border)',alignItems:'flex-start'}}>
+              <div style={{width:32,flexShrink:0,fontFamily:"'Share Tech Mono',monospace",fontSize:12,fontWeight:700,color:'var(--gold)',textAlign:'center',paddingTop:1}}>{a}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:'var(--text)',fontFamily:"'Cinzel',serif",letterSpacing:.3,marginBottom:1}}>{l}</div>
+                <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.5}}>{d}</div>
+              </div>
+            </div>
+          ))}
+          {core?.keyDefinitions&&(<>
+            <div className="section-label">Core Definitions</div>
+            {Object.entries(core.keyDefinitions).map(([k,v])=>(
+              <div key={k} style={{marginBottom:8}}>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',textTransform:'capitalize'}}>{k.replace(/([A-Z])/g,' $1').trim()}</div>
+                <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.5}}>{v}</div>
+              </div>
+            ))}
+          </>)}
+        </div>
+      )}
+    </div>
+  </>);
+}
+
 // ── COMMANDER ARMY SCREEN (selector) ─────────────────────────────────────────
 function CommanderScreen({armies,onBack}){
   const [selFid,setSelFid]=React.useState(null);
@@ -1970,7 +2135,7 @@ function CommanderScreen({armies,onBack}){
           {selCmd.img&&(
             <div style={{position:'relative',background:selCmd.colour||'var(--bg1)'}}>
               <img src={selCmd.img} alt={selCmd.name}
-                style={{width:'100%',height:260,objectFit:'cover',objectPosition:'center top',display:'block',opacity:.85,
+                style={{width:'100%',height:260,objectFit:'cover',objectPosition:selCmd.imgPos||'center top',display:'block',opacity:.85,
                   maskImage:'linear-gradient(to bottom,black 60%,transparent 100%)',
                   WebkitMaskImage:'linear-gradient(to bottom,black 60%,transparent 100%)'}}
                 onError={e=>{e.target.style.height='60px';e.target.style.opacity=0}}/>
@@ -2029,7 +2194,7 @@ function CommanderScreen({armies,onBack}){
             onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
             {cmd.img&&(
               <img src={cmd.img} alt={cmd.name}
-                style={{width:64,height:64,objectFit:'cover',objectPosition:'center top',flexShrink:0,opacity:.85}}
+                style={{width:64,height:64,objectFit:'cover',objectPosition:cmd.imgPos||'center top',flexShrink:0,opacity:.85}}
                 onError={e=>{e.target.style.display='none'}}/>
             )}
             <div style={{padding:'10px 10px 10px 0',flex:1,minWidth:0}}>
@@ -2283,7 +2448,7 @@ function WarHubScreen({savedBattles,setSavedBattles,setBattle,setScreen,onBack,a
   return(
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
       <div className="topbar">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}>⌂</button>
+        <button className="btn-home" onClick={onBack} title="Main Menu">⌂</button>
         <span className="topbar-title">War</span>
         <div/>
       </div>
@@ -3874,7 +4039,7 @@ function BattlefieldImage({name}){
     'Hammer and Anvil':'PN_HammerAndAnvil.png','Hammer_and_Anvil':'PN_HammerAndAnvil.png',
     'Search and Destroy':'PN_SearchAndDestroy.png','Search_and_Destroy':'PN_SearchAndDestroy.png',
     'Sweeping Engagement':'PN_SweepingEngagement.png','Sweeping_Engagement':'PN_SweepingEngagement.png',
-    'Spearhead Assault':'PN_SpearheadAssault.png','Spearhead_Assault':'PN_SpearheadAssault.png',
+    'Tipping Point':'PN_TippingPoint.png','Tipping_Point':'PN_TippingPoint.png',
     'random':'PN_DawnOfWar.png',
   };
 
@@ -3904,6 +4069,12 @@ function BattlefieldImage({name}){
 
 function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
   const [step,setStep]=useState(1);
+  const [showAbandonConfirm,setShowAbandonConfirm]=useState(false);
+  function requestCancel(){
+    // Only interrupt with a confirmation once real decisions have been made —
+    // stepping back from an empty first step needs no warning.
+    if(step>1) setShowAbandonConfirm(true); else onCancel();
+  }
   const [mode,setMode]=useState(null);
   const [pts,setPts]=useState(2000);
   const [passPlay,setPassPlay]=useState(false);
@@ -3968,7 +4139,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
     const mr=pnData.missionRuleCards?drawRandom(pnData.missionRuleCards,1):[];
     setMissionRules(mr);
     // Deployment — use terrain layouts key names as pseudo-deployment zones
-    const deplOptions=['Dawn of War','Search and Destroy','Hammer and Anvil','Spearhead Assault','Sweeping Engagement','Crucible of Battle'];
+    const deplOptions=['Dawn of War','Search and Destroy','Hammer and Anvil','Tipping Point','Sweeping Engagement','Crucible of Battle'];
     setDeployment({key:'random',name:deplOptions[Math.floor(Math.random()*deplOptions.length)],desc:'Randomly determined deployment zone.'});
     // Battlefield — use terrain layout info from JSON
     if(pnData.terrainLayouts){
@@ -4063,7 +4234,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
       {/* Header */}
       <div className="topbar">
-        <button className="btn btn-outline btn-sm" onClick={onCancel}>← Back</button>
+        <button className="btn btn-outline btn-sm" onClick={requestCancel}>← Back</button>
         <span className="topbar-title">Battle Setup</span>
         <span style={{fontSize:9,color:'var(--text3)',letterSpacing:2}}>STEP {step}/{TOTAL_STEPS}</span>
       </div>
@@ -4207,22 +4378,26 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               )}
             </div>
             <div className="section-label">Select {passPlay?'Player 1 Army':'Your Army'}</div>
-            {filteredArmies.map(a=>(
+            {filteredArmies.map(a=>{
+              const takenByP2=passPlay&&p2Army===a.id;
+              return(
               <div key={a.id}
-                onClick={()=>setP1Army(a.id)}
+                onClick={()=>{if(!takenByP2)setP1Army(a.id);}}
                 style={{
                   background:p1Army===a.id?'var(--golddim)':'var(--bg1)',
                   border:`1px solid ${p1Army===a.id?'var(--gold)':'var(--border)'}`,
-                  padding:'10px 14px',marginBottom:4,cursor:'pointer',display:'flex',gap:10,alignItems:'center',
+                  padding:'10px 14px',marginBottom:4,cursor:takenByP2?'not-allowed':'pointer',display:'flex',gap:10,alignItems:'center',
                   borderLeft:p1Army===a.id?'3px solid var(--gold)':'3px solid transparent',
+                  opacity:takenByP2?0.4:1,
                 }}>
                 <div className="army-faction-mark" style={{width:28,height:28,fontSize:9}}>{FACTION_ICONS[a.factionId]||'?'}</div>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:'Cinzel,serif',fontSize:11,color:p1Army===a.id?'var(--gold)':'var(--text)',letterSpacing:.5}}>{a.name}</div>
-                  <div style={{fontSize:9,color:'var(--text3)',marginTop:2}}>{a.detachment?.name||'No Detachment'} · {a.units?.length||0} units</div>
+                  <div style={{fontSize:9,color:'var(--text3)',marginTop:2}}>{takenByP2?'Already fielded by Player 2':(a.detachment?.name||'No Detachment')+' · '+(a.units?.length||0)+' units'}</div>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {filteredArmies.length===0&&<div style={{color:'var(--text3)',fontSize:11,padding:16,textAlign:'center',border:'1px solid var(--border)'}}>No armies match this game mode and points limit</div>}
 
             {passPlay&&(
@@ -4474,6 +4649,12 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               const missionIssues=[];
               if(isPariahNexus&&!primaryMission) missionIssues.push('No Primary Mission selected (go back to Step 5)');
               if(isPariahNexus&&!deployment) missionIssues.push('No Deployment Zone selected (go back to Step 6)');
+              // Every player must lock in exactly 2 Secondary Missions (drawn or hand-picked)
+              // before the battle can begin — a battle with an empty hand can't be scored fairly.
+              if(isPariahNexus){
+                if(p1Secondaries.length<2) missionIssues.push(`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+                if(passPlay&&p2Secondaries.length<2) missionIssues.push(`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+              }
               const canStart = !p1Issues.length && (!passPlay||!p2Issues.length) && !missionIssues.length;
               return(<>
                 {allIssues.length>0&&(
@@ -4520,7 +4701,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               </div>
             ):(
               <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
-                {['Dawn of War','Search and Destroy','Hammer and Anvil','Spearhead Assault','Sweeping Engagement','Crucible of Battle'].map(d=>(
+                {['Dawn of War','Search and Destroy','Hammer and Anvil','Tipping Point','Sweeping Engagement','Crucible of Battle'].map(d=>(
                   <div key={d} onClick={()=>setDeployment({key:d.replace(/ /g,'_'),name:d,desc:'Selected deployment zone.'})}
                     style={{
                       background:deployment?.name===d?'var(--golddim)':'var(--bg1)',
@@ -4635,6 +4816,12 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               const missionIssues=[];
               if(isPariahNexus&&!primaryMission) missionIssues.push('No Primary Mission selected (go back to Step 5)');
               if(isPariahNexus&&!deployment) missionIssues.push('No Deployment Zone selected (go back to Step 6)');
+              // Every player must lock in exactly 2 Secondary Missions (drawn or hand-picked)
+              // before the battle can begin — a battle with an empty hand can't be scored fairly.
+              if(isPariahNexus){
+                if(p1Secondaries.length<2) missionIssues.push(`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+                if(passPlay&&p2Secondaries.length<2) missionIssues.push(`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+              }
               const canStart = !p1Issues.length && (!passPlay||!p2Issues.length) && !missionIssues.length;
               return(<>
                 {allIssues.length>0&&(
@@ -4671,6 +4858,22 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
           </button>
         )}
       </div>
+
+      {/* Abandon-setup confirmation */}
+      {showAbandonConfirm&&(
+        <div className="modal-overlay" onClick={()=>setShowAbandonConfirm(false)}>
+          <div className="modal anim-slide-up" style={{maxWidth:360}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">Abandon the Muster?</div>
+            <div style={{fontSize:11,color:'var(--text2)',lineHeight:1.7,marginBottom:14}}>
+              The war council has not yet been sealed. Turning back now scatters every order given this session to the void — armies, mission, and battle-plan alike.
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-outline" style={{flex:1}} onClick={()=>setShowAbandonConfirm(false)}>Stay the Course</button>
+              <button className="btn btn-danger" style={{flex:1}} onClick={onCancel}>Abandon</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -7338,8 +7541,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             {remote&&<span style={{fontSize:9,color:'var(--blueBright)',border:'1px solid var(--blueBright)',padding:'0 5px',letterSpacing:2}}>🌐 {remote.code}</span>}
             <span style={{fontSize:9,color:'var(--text3)'}}>Round {round}/5</span>
             <span style={{fontSize:9,color:'var(--gold)'}}>{PHASES[phase]} Phase</span>
-            <button onClick={()=>setShowPause(true)}
-              style={{background:'none',border:'1px solid var(--goldborder)',color:'var(--gold)',padding:'2px 8px',cursor:'pointer',fontSize:9,fontFamily:"'Cinzel',serif",letterSpacing:1,marginLeft:4}}>
+            <button className="btn-home" onClick={()=>setShowPause(true)} title="Pause / Main Menu"
+              style={{width:26,height:26,fontSize:13,marginLeft:4}}>
               ⌂
             </button>
 
@@ -7377,14 +7580,19 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
         </div>
 
         {/* Commander Reaction Toast */}
+        {/* Fixed + above every modal (z-index 500 > .modal-overlay's 200) so a
+            commander reaction firing mid-roll-off is never hidden behind the
+            dice modal that triggered it. */}
         {cmdReaction&&(
           <div style={{
+            position:'fixed',top:8,left:8,right:8,zIndex:500,
             display:'flex',alignItems:'center',gap:10,
             padding:'8px 12px',
-            background:cmdReaction.player===1?'rgba(9,9,14,.95)':'rgba(14,9,9,.95)',
-            borderBottom:`1px solid ${cmdReaction.accent}`,
+            background:cmdReaction.player===1?'rgba(9,9,14,.97)':'rgba(14,9,9,.97)',
+            border:`1px solid ${cmdReaction.accent}`,
+            boxShadow:'0 4px 20px rgba(0,0,0,.5)',
             animation:'fadeIn .3s ease',
-            cursor:'pointer',flexShrink:0,
+            cursor:'pointer',
           }} onClick={()=>setCmdReaction(null)}>
             {cmdReaction.img&&(
               <img src={cmdReaction.img} alt={cmdReaction.name}
@@ -7439,8 +7647,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             {t.l}
           </div>
         ))}
-        <div className={`tab ${showCommander?'active':''}`} onClick={()=>setShowCommander(true)} style={{fontSize:9,padding:'8px 10px',marginLeft:'auto',color:'var(--gold)'}}>
-          CMD ⚔
+        <div className={`tab tab-commander ${showCommander?'active':''}`} onClick={()=>setShowCommander(true)} style={{fontSize:9}}>
+          ⚔ COMMANDER
         </div>
       </div>
 
@@ -7989,6 +8197,11 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                     const kws=(u.keywords||[]).map(k=>k.toLowerCase());
                     const abilities=(u.abilities||[]).map(a=>(a.name||'').toLowerCase());
                     const hasAdvanced=unitAction[entry.id]==='advance';
+                    // Any active battle effect (army rule, stratagem) granting
+                    // Advance & Charge counts too — e.g. Waaagh!, Fights First
+                    // detachment rules — not just a datasheet ability.
+                    const fxAllowsAdvanceCharge=(activeEffects||[]).some(f=>
+                      (!f.unitId||f.unitId===entry.id)&&(f.modifiers||[]).some(m=>m.stat==='advance_and_charge'));
                     const movedUnits=Object.entries(unitAction).filter(([id,v])=>['move','advance'].includes(v)).map(([id])=>id);
                     const isVehicle=kws.includes('vehicle')||kws.includes('monster');
 
@@ -8003,7 +8216,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                       return ab.includes('assault');
                     });
                     const hasPistol=rangedWeapons.some(w=>(w.abilities||'').toLowerCase().includes('pistol'));
-                    const hasChargeException=abilities.some(a=>a.includes('martial inspiration')||a.includes('advance and charge'));
+                    const hasChargeException=fxAllowsAdvanceCharge||(u.abilities||[]).some(a=>
+                      parseModifiersFromText(a.description||a.rule||a.effect||'').some(m=>m.stat==='advance_and_charge'));
 
                     switch(phase){
                       case 0: // Command Phase — phase-level, not unit-level
@@ -8809,6 +9023,41 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
 
 
+// ── STABLE SCREEN WRAPPER ────────────────────────────────────────────────────
+// Several screens below (ArmyScreen, CollectionScreen, UnitBrowserScreen, …)
+// are declared as nested functions inside App() because they close over a lot
+// of App's state and setters. The cost: a plain `function X(){...}` declared
+// inside a component body is a NEW function object every render, so
+// `<X/>` gets a different element `type` each time — React reads that as "a
+// different component" and unmounts/remounts the whole screen, wiping its own
+// local state (which unit panel was open, which faction you were browsing,
+// search text, wizard step…). That's the bug behind "changing a box count /
+// adding a unit kicks me back a few steps": any App-level state change
+// (adding a unit, editing a box) re-renders App, which redeclares the screen
+// function, which resets it.
+//
+// stableScreen(key) returns a component whose identity never changes across
+// renders. Call `registerScreen(key, fn)` once per App render with that
+// render's freshly-closed-over screen function, then render `<Stable/>` —
+// React keeps reusing the same wrapper type forever, so the screen's own
+// hooks/state persist exactly like a normal top-level component's would.
+const __screenSlots={};
+function registerScreen(key,fn){ __screenSlots[key]=fn; }
+function stableScreen(key){
+  const Wrapper=(props)=> (__screenSlots[key]?__screenSlots[key](props):null);
+  Wrapper.displayName='Stable_'+key;
+  return Wrapper;
+}
+const StableMenuScreen=stableScreen('menu');
+const StableArmiesScreen=stableScreen('armies');
+const StableFactionsScreen=stableScreen('factions');
+const StableSmChapterScreen=stableScreen('smChapter');
+const StableDetachmentsScreen=stableScreen('detachments');
+const StableArmyScreen=stableScreen('army');
+const StableUnitBrowserScreen=stableScreen('unitBrowser');
+const StableCollectionScreen=stableScreen('collection');
+const StableAoSWarscrollsScreen=stableScreen('aosWarscrolls');
+
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 
 function App(){
@@ -8854,22 +9103,20 @@ function App(){
     if(aosCache.current[fid]){ setAosFdata(aosCache.current[fid]); return; }
     setAosLoading(true); setAosFdata(null);
     try{
-      const r=await fetch(AOS_DATA_BASE+(aosIndex?.[fid]?.file||fid+'.json'));
-      const d=r.ok?await r.json():null;
+      const d=await fetchRepoJSON('AoS/Data/'+(aosIndex?.[fid]?.file||fid+'.json'));
       if(d) aosCache.current[fid]=d;
       setAosFdata(d);
     }catch(e){ console.error('[AoS] faction load failed',fid,e); }
     finally{ setAosLoading(false); }
   }
   useEffect(()=>{
-    fetch(AOS_DATA_BASE+'index.json').then(r=>r.ok?r.json():null).then(d=>{ if(d) setAosIndex(d); }).catch(()=>{});
+    fetchRepoJSON('AoS/Data/index.json').then(d=>{ if(d) setAosIndex(d); }).catch(()=>{});
   },[]);
   // Curated "models per retail box" data (WH40K/Data/box-sizes.json on GitHub).
   // Cached in localStorage so the Collection works offline too.
   const [boxSizes,setBoxSizes]=useState(()=>load('wh40k_boxsizes',null));
   useEffect(()=>{
-    fetch('https://raw.githubusercontent.com/7moud7/The-Strategium/main/WH40K/Data/box-sizes.json')
-      .then(r=>r.ok?r.json():null)
+    fetchRepoJSON('WH40K/Data/box-sizes.json')
       .then(d=>{ if(d?.byName){ setBoxSizes(d.byName); save('wh40k_boxsizes',d.byName); } })
       .catch(()=>{});
   },[]);
@@ -9413,7 +9660,7 @@ function App(){
   function ArmiesScreen(){
     return(<>
       <div className="topbar">
-        <button className="btn btn-ghost btn-sm" onClick={()=>setAppOpen(false)} title="Main Menu">⌂</button>
+        <button className="btn-home" onClick={()=>setAppOpen(false)} title="Main Menu">⌂</button>
         <span className="topbar-title">The Armoury</span>
         <button className="btn btn-gold btn-sm" onClick={()=>setScreen('factions')}>+ Army</button>
       </div>
@@ -9599,6 +9846,15 @@ function App(){
     const [editingName,setEditingName]=useState(false);
     const [draftName,setDraftName]=useState('');
     const [expandTarget,setExpandTarget]=useState(null); // {entryId,field} jump-to-fix from warnings
+    const [savedFlash,setSavedFlash]=useState(false);
+    // Armies already persist to this device automatically on every change —
+    // this button exists for peace of mind: force an immediate write and
+    // confirm it happened, rather than trusting an invisible background save.
+    function saveArmyNow(){
+      save('wh40k_v3',armies);
+      setSavedFlash(true);
+      setTimeout(()=>setSavedFlash(false),1800);
+    }
     if(!active) return(
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%'}}>
         <div className="spinner"/>
@@ -9622,6 +9878,9 @@ function App(){
         )}
         <div style={{display:'flex',gap:4}}>
           <button className="btn btn-ghost btn-sm" onClick={()=>setShowLegend(true)} title="Rules Legend" style={{fontSize:11,padding:'4px 8px'}}>?</button>
+          <button className="btn btn-outline btn-sm" onClick={saveArmyNow} title="Save this Army to your device">
+            {savedFlash?'✓ Saved':'💾 Save'}
+          </button>
           <button className="btn btn-gold btn-sm" onClick={async()=>{if(!fdata&&active)await loadFaction(active.factionId);setScreen('unit-browser');}}>+ Unit</button>
         </div>
       </div>
@@ -10392,34 +10651,37 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                                     onClick={()=>setBoxSizeOverride(unit.id, collFactionData?.units?.find(x=>x.id===unit.id), (unit.boxSize||Math.round(nModels/unit.boxes)||1)+1)}>+</button>
                                   {unit.boxSizeOverride&&<span style={{fontSize:8,color:'var(--gold)',border:'1px solid var(--goldborder)',padding:'0 4px'}}>manual</span>}
                                 </div>
-                                {/* Individual model slots */}
-                                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))',gap:4}}>
+                                {/* Individual model slots — three direct-pick status buttons
+                                    per model instead of a tap-to-cycle control, so setting
+                                    "Painted" is always exactly one tap. */}
+                                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:6}}>
                                   {slots.map((name,mi)=>{
                                     const status = statuses[mi] || 'unpainted';
-                                    const nextStatus = {unpainted:'started', started:'painted', painted:'unpainted'};
                                     const color = PAINT_COLOR[status];
                                     return(
-                                      <div key={mi}
-                                        onClick={()=>setModelStatus(unit.id, mi, nextStatus[status])}
-                                        style={{
-                                          background:'var(--bg2)', border:`1px solid ${color}40`,
-                                          borderLeft:`3px solid ${color}`,
-                                          padding:'5px 6px', cursor:'pointer', transition:'all .1s',
-                                          userSelect:'none',
-                                        }}>
-                                        <div style={{fontSize:8,color:'var(--text3)',marginBottom:2,letterSpacing:.3,
+                                      <div key={mi} style={{background:'var(--bg2)', border:`1px solid ${color}40`, borderLeft:`3px solid ${color}`, padding:'5px 6px'}}>
+                                        <div style={{fontSize:8,color:'var(--text3)',marginBottom:4,letterSpacing:.3,
                                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                           {name}
                                         </div>
-                                        <div style={{fontSize:9,fontWeight:700,color,textTransform:'uppercase',letterSpacing:.5}}>
-                                          {status==='unpainted'?'Bare':status==='started'?'W.I.P':'Done'}
+                                        <div style={{display:'flex',gap:2}}>
+                                          {[['unpainted','Bare'],['started','Part'],['painted','Done']].map(([st,label])=>(
+                                            <button key={st}
+                                              onClick={()=>setModelStatus(unit.id, mi, st)}
+                                              style={{
+                                                flex:1,fontSize:8,padding:'3px 2px',cursor:'pointer',fontWeight:700,
+                                                letterSpacing:.3,textTransform:'uppercase',
+                                                border:`1px solid ${status===st?PAINT_COLOR[st]:'var(--border)'}`,
+                                                background:status===st?PAINT_COLOR[st]+'26':'var(--bg1)',
+                                                color:status===st?PAINT_COLOR[st]:'var(--text3)',
+                                              }}>
+                                              {label}
+                                            </button>
+                                          ))}
                                         </div>
                                       </div>
                                     );
                                   })}
-                                </div>
-                                <div style={{fontSize:8,color:'var(--text3)',marginTop:6,textAlign:'center'}}>
-                                  Tap a model to cycle: Bare → W.I.P → Done
                                 </div>
                               </div>
                             )}
@@ -10836,8 +11098,21 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
   }
 
     // ── MAIN APP RENDER ──────────────────────────────────────────────────────
+  // Re-point the stable wrappers at THIS render's freshly-closed-over screen
+  // functions every time App renders, so they always see current state/props
+  // while keeping a constant component identity (see stableScreen() above).
+  registerScreen('menu',MenuScreen);
+  registerScreen('armies',ArmiesScreen);
+  registerScreen('factions',FactionsScreen);
+  registerScreen('smChapter',SmChapterScreen);
+  registerScreen('detachments',DetachmentsScreen);
+  registerScreen('army',ArmyScreen);
+  registerScreen('unitBrowser',UnitBrowserScreen);
+  registerScreen('collection',CollectionScreen);
+  registerScreen('aosWarscrolls',AoSWarscrollsScreen);
+
   return(<>
-    <MenuScreen/>
+    <StableMenuScreen/>
     <div className={`app ${appOpen?'open':''}`}>
       {indexStatus!=='ready'&&(
         <div style={{position:'fixed',inset:0,background:'var(--bg0)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16,zIndex:99}}>
@@ -10847,23 +11122,27 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
           <div style={{color:'var(--text3)',fontSize:9,marginTop:4,opacity:.6}}>{DATA_BASE}</div>
         </div>
       )}
-      {screen==='armies'&&<ArmiesScreen/>}
-      {screen==='factions'&&<FactionsScreen/>}
-      {screen==='sm-chapter'&&<SmChapterScreen/>}
-      {screen==='detachments'&&<DetachmentsScreen/>}
-      {screen==='army'&&<ArmyScreen/>}
-      {screen==='unit-browser'&&<UnitBrowserScreen/>}
-      {screen==='collection'&&<CollectionScreen/>}
-      {screen==='archive'&&<ReferenceArchiveScreen/>}
-      {screen==='aos-warscrolls'&&<AoSWarscrollsScreen/>}
+      {screen==='armies'&&<StableArmiesScreen/>}
+      {screen==='factions'&&<StableFactionsScreen/>}
+      {screen==='sm-chapter'&&<StableSmChapterScreen/>}
+      {screen==='detachments'&&<StableDetachmentsScreen/>}
+      {screen==='army'&&<StableArmyScreen/>}
+      {screen==='unit-browser'&&<StableUnitBrowserScreen/>}
+      {screen==='collection'&&<StableCollectionScreen/>}
+      {screen==='archive'&&<ReferenceArchiveScreen coreStrats={coreStrats} onBack={()=>setAppOpen(false)}/>}
+      {screen==='aos-warscrolls'&&<StableAoSWarscrollsScreen/>}
     </div>
 
     {/* ── GAME-SYSTEM TRANSITION CINEMATIC ── */}
     {menuTransition&&(
       <div style={{position:'fixed',inset:0,zIndex:500,background:'#000',display:'flex',alignItems:'center',justifyContent:'center'}}
         onClick={()=>{setMenuPath(menuTransition.nextPath);setMenuTransition(null);}}>
+        {/* This clip is portrait (9:16). On a landscape desktop window,
+            object-fit:cover would blow it up and crop the sides down to a
+            sliver — "too zoomed in" on wide screens. contain shows the whole
+            frame letterboxed instead, correct on any window shape. */}
         <video src={menuTransition.video} autoPlay muted playsInline
-          style={{width:'100%',height:'100%',objectFit:'cover'}}
+          style={{width:'100%',height:'100%',objectFit:'contain'}}
           onEnded={()=>{setMenuPath(menuTransition.nextPath);setMenuTransition(null);}}
           onError={()=>{setMenuPath(menuTransition.nextPath);setMenuTransition(null);}}/>
         <div style={{position:'absolute',bottom:24,right:20,fontSize:10,color:'rgba(255,255,255,.6)',letterSpacing:2,fontFamily:"'Cinzel',serif"}}>TAP TO SKIP</div>
