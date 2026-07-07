@@ -999,6 +999,93 @@ const armyRulesCache = {};
 // recorded voice actor line). Three layers: SFX (short one-shots for game
 // events), ambient music (looping generative drone per faction/mood), and
 // commander speech (opt-in).
+// ZzFX — Zuper Zmall Zound Zynth, by Frank Force. MIT licensed:
+// https://github.com/KilledByAPixel/ZzFX (© 2019 Frank Force — see LICENSE
+// notice above). A small, purpose-built retro-game sound synth used across
+// hundreds of js13k game-jam entries; every sound it makes is generated from
+// 21 numeric parameters (waveform shape, envelope, pitch slide, bit-crush,
+// filter…) at render time — there is no sampled or recorded audio involved.
+// Adapted here to render into THIS app's own AudioContext/gain bus (the
+// original always opens its own fresh AudioContext) so it respects the
+// app's mute/volume settings instead of playing at a fixed system volume.
+function zzfxBuild(volume=1,randomness=.05,frequency=220,attack=0,sustain=0,release=.1,
+  shape=0,shapeCurve=1,slide=0,deltaSlide=0,pitchJump=0,pitchJumpTime=0,repeatTime=0,
+  noise=0,modulation=0,bitCrush=0,delay=0,sustainVolume=1,decay=0,tremolo=0,filter=0){
+  const sampleRate=44100,PI2=Math.PI*2,abs=Math.abs,sign=v=>v<0?-1:1;
+  let startSlide=slide*=500*PI2/sampleRate/sampleRate;
+  let startFrequency=frequency*=(1+randomness*2*Math.random()-randomness)*PI2/sampleRate;
+  let modOffset=0,repeat=0,crush=0,jump=1,t=0,s=0,f;
+  const quality=2,w=PI2*abs(filter)*2/sampleRate,cosW=Math.cos(w),alpha=Math.sin(w)/2/quality;
+  const a0=1+alpha,a1=-2*cosW/a0,a2=(1-alpha)/a0;
+  const b0=(1+sign(filter)*cosW)/2/a0,b1=-(sign(filter)+cosW)/a0,b2=b0;
+  let x2=0,x1=0,y2=0,y1=0;
+  attack=attack*sampleRate||9; decay*=sampleRate; sustain*=sampleRate; release*=sampleRate; delay*=sampleRate;
+  deltaSlide*=500*PI2/sampleRate**3; modulation*=PI2/sampleRate; pitchJump*=PI2/sampleRate;
+  pitchJumpTime*=sampleRate; repeatTime=repeatTime*sampleRate|0;
+  const length=attack+decay+sustain+release+delay|0;
+  const b=new Float32Array(Math.max(1,length));
+  for(let i=0;i<length;i++){
+    if(!(++crush%(bitCrush*100|0))){
+      s=shape?shape>1?shape>2?shape>3?shape>4?
+        (t/PI2%1<shapeCurve/2)*2-1:
+        Math.sin(t**3):
+        Math.max(Math.min(Math.tan(t),1),-1):
+        1-(2*t/PI2%2+2)%2:
+        1-4*abs(Math.round(t/PI2)-t/PI2):
+        Math.sin(t);
+      s=(repeatTime?1-tremolo+tremolo*Math.sin(PI2*i/repeatTime):1)*
+        (shape>4?s:sign(s)*abs(s)**shapeCurve)*
+        (i<attack?i/attack:
+         i<attack+decay?1-((i-attack)/decay)*(1-sustainVolume):
+         i<attack+decay+sustain?sustainVolume:
+         i<length-delay?(length-i-delay)/release*sustainVolume:0);
+      s=delay?s/2+(delay>i?0:(i<length-delay?1:(length-i)/delay)*(b[i-delay|0]||0)/2):s;
+      if(filter) s=y1=b2*x2+b1*(x2=x1)+b0*(x1=s)-a2*y2-a1*(y2=y1);
+    }
+    f=(frequency+=slide+=deltaSlide)*Math.cos(modulation*modOffset++);
+    t+=f+f*noise*Math.sin(i**5);
+    if(jump&&++jump>pitchJumpTime){frequency+=pitchJump;startFrequency+=pitchJump;jump=0;}
+    if(repeatTime&&!(++repeat%repeatTime)){frequency=startFrequency;slide=startSlide;jump=jump||1;}
+    b[i]=s*volume;
+  }
+  return b;
+}
+function zzfxPlay(ctx,dest,delay,params){
+  if(!ctx) return;
+  const samples=zzfxBuild(...params);
+  const buf=ctx.createBuffer(1,samples.length,44100);
+  buf.getChannelData(0).set(samples);
+  const src=ctx.createBufferSource();
+  src.buffer=buf; src.connect(dest); src.start(ctx.currentTime+(delay||0));
+}
+// Preset table — one ZzFX parameter array per SFX key, tuned by acoustic
+// archetype (laser/bolt-weapon/explosion/etc.), not by copying any specific
+// recording. [volume,randomness,frequency,attack,sustain,release,shape,
+// shapeCurve,slide,deltaSlide,pitchJump,pitchJumpTime,repeatTime,noise,
+// modulation,bitCrush,delay,sustainVolume,decay,tremolo,filter]
+const ZZFX_PRESETS={
+  activate:[.5,0,600,0,.01,.03,1,1,80],
+  ui:      [.5,0,600,0,.01,.03,1,1,80],
+  phase:   [.5,0,440,0,.05,.12,0,1,60],
+  cp:      [.5,0,700,0,.02,.05,1,1,50],
+  score:   [.6,0,523,0,.04,.15,1,1,300],
+  vp:      [.6,0,523,0,.04,.15,1,1,300],
+  charge:  [.7,.1,140,.02,.15,.25,2,1.2,120],
+  stratagem:[.5,0,300,0,.05,.15,3,1,0,0,0,0,0,0,0,4],
+  wound:   [.6,.2,150,0,.02,.08,4,1,0,0,0,0,0,3],
+  destroy: [.6,.3,80,0,.1,.5,4,2,-20,0,0,0,0,2,0,0,0,1,0,0,-800],
+  diceRoll:[.4,.3,2500,0,.01,.02,4,1,0,0,0,0,0,1],
+  bolter:  [.7,.3,90,0,.015,.05,4,1,0,0,0,0,0,4],
+  lasgun:  [.6,.05,1400,0,.02,.08,0,1,-900],
+  plasma:  [.7,.1,300,.01,.08,.2,2,1.5,500,0,0,0,0,.3],
+  melta:   [.55,.3,120,0,.05,.4,4,1.5,0,0,0,0,0,3,0,0,0,1,0,0,-500],
+  flamer:  [.5,.4,200,.05,.4,.3,4,1,0,0,0,0,0,2,3],
+  meleeChain:[.6,.2,220,0,.3,.05,3,1,0,0,0,0,.02,2],
+  meleePower:[.7,.05,800,0,.03,.1,0,1,-300,0,600,.02],
+  meleeBasic:[.6,.2,180,0,.02,.06,4,1,0,0,0,0,0,3],
+  heavyShot:[.55,.2,70,0,.08,.4,4,1.5,0,0,0,0,0,2,0,0,0,1,0,0,-600],
+  genericShot:[.6,.2,300,0,.03,.08,4,1,0,0,0,0,0,2],
+};
 const AUDIO_SETTINGS_KEY='wh40k_audio_settings';
 function loadAudioSettings(){
   try{
@@ -1043,64 +1130,25 @@ const AudioEngine={
     if(this.settings.muted) window.speechSynthesis?.cancel();
     return this.settings;
   },
-  // ── One-shot SFX — every sound below is a synthesised waveform, described
-  // by its acoustic character rather than reproducing any official audio. ──
+  // ── One-shot SFX. If you've imported your own sound pack (Settings & Backup
+  // → Audio → Import Sound Pack), your clip for this key plays instead — it
+  // never leaves this device. Otherwise falls back to the ZzFX synth preset. ──
   playSFX(key){
     const ctx=this._ensure();
     if(!ctx||this.settings.muted) return;
     if(ctx.state==='suspended') ctx.resume().catch(()=>{});
-    const t=ctx.currentTime;
-    const out=ctx.createGain();
-    out.connect(this.sfxGain);
-    const noiseBuf=(dur)=>{
-      const buf=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*dur)),ctx.sampleRate);
-      const d=buf.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
-      return buf;
-    };
-    const tone=(freqStart,freqEnd,dur,type,peak,delay=0)=>{
-      const osc=ctx.createOscillator(); osc.type=type||'sine';
-      const g=ctx.createGain();
-      osc.frequency.setValueAtTime(freqStart,t+delay);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(1,freqEnd),t+delay+dur);
-      g.gain.setValueAtTime(0.0001,t+delay);
-      g.gain.exponentialRampToValueAtTime(peak,t+delay+Math.min(0.02,dur*0.3));
-      g.gain.exponentialRampToValueAtTime(0.0001,t+delay+dur);
-      osc.connect(g); g.connect(out);
-      osc.start(t+delay); osc.stop(t+delay+dur+0.02);
-    };
-    const burst=(dur,peak,filterFreq,delay=0)=>{
-      const src=ctx.createBufferSource(); src.buffer=noiseBuf(dur);
-      const filt=ctx.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value=filterFreq; filt.Q.value=0.9;
-      const g=ctx.createGain();
-      g.gain.setValueAtTime(0.0001,t+delay);
-      g.gain.exponentialRampToValueAtTime(peak,t+delay+Math.min(0.015,dur*0.2));
-      g.gain.exponentialRampToValueAtTime(0.0001,t+delay+dur);
-      src.connect(filt); filt.connect(g); g.connect(out);
-      src.start(t+delay); src.stop(t+delay+dur+0.02);
-    };
-    switch(key){
-      case 'activate': case 'ui': tone(720,900,0.06,'triangle',0.18); break;
-      case 'phase': tone(300,520,0.22,'sine',0.22); tone(450,700,0.22,'sine',0.14,0.06); break;
-      case 'charge': tone(160,520,0.35,'sawtooth',0.16); burst(0.2,0.1,1400,0.05); break;
-      case 'wound': burst(0.09,0.22,900); break;
-      case 'destroy': burst(0.5,0.3,300); tone(180,40,0.5,'sawtooth',0.2); break;
-      case 'score': case 'vp': tone(520,780,0.15,'sine',0.2); tone(780,1040,0.18,'sine',0.18,0.1); break;
-      case 'cp': tone(440,660,0.12,'triangle',0.16); break;
-      case 'stratagem': tone(300,900,0.18,'square',0.1); break;
-      case 'diceRoll': for(let i=0;i<3;i++) burst(0.04,0.15,2000+i*400,i*0.05); break;
-      case 'bolter': for(let i=0;i<3;i++){ burst(0.05,0.28,700,i*0.06); tone(180,90,0.06,'square',0.12,i*0.06); } break;
-      case 'lasgun': tone(1800,600,0.12,'sawtooth',0.16); break;
-      case 'plasma': tone(500,1600,0.22,'sawtooth',0.2); burst(0.1,0.12,3000,0.15); break;
-      case 'melta': burst(0.35,0.28,500); tone(300,90,0.3,'sawtooth',0.18,0.02); break;
-      case 'flamer': burst(0.5,0.22,1200); burst(0.5,0.15,600,0.05); break;
-      case 'meleeChain': for(let i=0;i<4;i++) burst(0.05,0.16,1800+i*200,i*0.045); break;
-      case 'meleePower': tone(1200,300,0.1,'sawtooth',0.2); burst(0.08,0.14,2500,0.02); break;
-      case 'meleeBasic': burst(0.08,0.2,1000); break;
-      case 'heavyShot': burst(0.28,0.3,350); tone(150,60,0.3,'sawtooth',0.2); break;
-      case 'genericShot': burst(0.1,0.2,1200); break;
-      default: tone(500,650,0.1,'sine',0.15);
-    }
+    const custom=this._customClips&&this._customClips[key];
+    if(custom){ this._playClipBuffer(custom); return; }
+    const REPEATS={bolter:[0,.06,.12],meleeChain:[0,.045,.09,.135],diceRoll:[0,.05,.1]};
+    const preset=ZZFX_PRESETS[key]||ZZFX_PRESETS.genericShot;
+    const delays=REPEATS[key]||[0];
+    for(const d of delays) zzfxPlay(ctx,this.sfxGain,d,preset);
+  },
+  _playClipBuffer(buf){
+    const ctx=this._ensure();
+    if(!ctx||!buf) return;
+    const src=ctx.createBufferSource();
+    src.buffer=buf; src.connect(this.sfxGain); src.start();
   },
   // ── Ambient — a looping, layered drone whose colour matches the army/mode
   // on the table. Pure synthesis: detuned oscillator layers through a slowly
