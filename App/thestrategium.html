@@ -3468,6 +3468,18 @@ function LeaderAttachModal({leader,bodyguardUnits,onAttach,onSkip,mode='leader'}
 //  - "1 model" / "1 model's X"               -> scope:'one' (pick exactly one model from the unit)
 //  - "Any number of models can each..."      -> scope:'any' (every model decides independently)
 // Each group also carries the replaced item (if any) and the list of choices (items that can be taken).
+const WARGEAR_WORDNUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10};
+// A "new clause opener" — used only to detect and repair the data-scrape bug
+// where 2+ independent swap clauses get concatenated into a single options[]
+// string with no separating punctuation. Must be followed shortly by an
+// actual replace/equip verb, otherwise a plain choice value like "1 Harlequin's
+// blade" would itself look like the start of a new clause and cause a false split.
+const WARGEAR_OPENER="(?:for every \\d+ models?|up to \\d+ models?|up to (?:one|two|three|four|five)\\b|any number of models|1 model(?:'s|’s)?|one model(?:'s|’s)?|\\d+\\s+[A-Z][A-Za-z' ]{0,30}?(?:'s|’s)\\s+(?:[a-z\\-]+\\s+){0,4}?(?:can (?:be |each )?(?:have|replace)|is replaced|can be replaced))";
+const WARGEAR_OPENER_RE=new RegExp(WARGEAR_OPENER,'i');
+function splitBundledWargearClauses(raw){
+  const withBreaks=raw.replace(new RegExp(`([a-z])(\\s+)(?=${WARGEAR_OPENER})`,'gi'),'$1.$2');
+  return withBreaks.split(new RegExp(`(?<=\\.)\\s+(?=${WARGEAR_OPENER})`,'i')).map(p=>p.trim()).filter(Boolean);
+}
 function parseWargearOptions(options){
   if(!options?.length) return [];
   const groups=[];
@@ -3478,32 +3490,48 @@ function parseWargearOptions(options){
     // Determine scope from the sentence opening (check before stripping HTML).
     // ratioN/maxN encode the legality limits enforced by the panel:
     //   'ratio' → "For every 5 models … 1 model can …"  (limit = floor(n/ratioN)×perN)
-    //   'upto'  → "Up to 2 models can …"                 (limit = maxN)
+    //   'upto'  → "Up to 2 models can …" / "Up to one Recon Trooper" (limit = maxN)
     let scope='any';
     let ratioN=null, perN=1, maxN=null;
     const ratioMatch=original.match(/^for every (\d+) models?[^,]*,?\s*(?:up to\s*)?(\d+)?\s*model/i);
-    const uptoMatch=original.match(/^up to (\d+) models?/i);
+    const uptoMatch=original.match(/^up to (\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i);
     if(ratioMatch){ scope='ratio'; ratioN=parseInt(ratioMatch[1]); perN=parseInt(ratioMatch[2]||'1'); }
-    else if(uptoMatch){ scope='upto'; maxN=parseInt(uptoMatch[1]); }
-    else if(/^any number of models/i.test(original)) scope='any';
-    else if(/^1 model/i.test(original)) scope='one';
+    else if(uptoMatch){ scope='upto'; const w=uptoMatch[1].toLowerCase(); maxN=WARGEAR_WORDNUM[w]||parseInt(w); }
+    else if(/^any number of/i.test(original)) scope='any';
+    else if(/^(?:1|one)\s+\S/i.test(original)) scope='one';
     else if(/^this model/i.test(original)) scope='single';
 
-    // Extract the replaced item from the cleaned sentence prefix
+    // Extract the replaced item from the cleaned sentence prefix — covers both
+    // passive ("X can be replaced with") and active ("replace their X with") phrasing.
     const cleanedFull=clean(original).replace(/\u2019/g,"'");
     let replaced=null;
-    const replMatch=cleanedFull.match(/(?:their|'s|its)\s+([a-z0-9 \-]+?)\s+(?:can be |)replaced with/i);
+    let replMatch=cleanedFull.match(/(?:their|'s|its)\s+([a-z0-9 \-]+?)\s+(?:can be |)replaced with/i);
+    if(!replMatch) replMatch=cleanedFull.match(/replace\s+(?:their|its|this model'?s?)\s+([a-z0-9 '\-]+?)\s+with/i);
     if(replMatch) replaced=replMatch[1].trim();
 
     // Extract choices. If the sentence contains a <li> list, split there BEFORE stripping tags
     // (joining list items after stripping tags loses the boundary between options).
     let choices=[];
-    if(/<li>/i.test(original)){
+    const hasLi=/<li>/i.test(original);
+    if(hasLi){
       const liMatches=[...original.matchAll(/<li>(.*?)<\/li>/gi)];
       choices=liMatches.map(m=>clean(m[1]).replace(/\.$/,'').trim()).filter(Boolean);
     } else {
-      const withMatch=cleanedFull.match(/(?:replaced with|equipped with)\s+(.+?)\.?$/i);
+      const withMatch=cleanedFull.match(/(?:replaced with|equipped with|can\s+(?:each\s+)?replace\s+(?:their|its|this model'?s?)\s+[a-z0-9 '\-]+?\s+with)\s+(.+?)\.?$/i);
       if(withMatch) choices=[withMatch[1].trim()];
+    }
+
+    // Repair: the scraper sometimes concatenates 2+ independent swap clauses into
+    // one plain-text entry with no separating punctuation, so a lazy capture bleeds
+    // into the next clause (e.g. two "Up to N models can replace X with Y" swaps
+    // joined into one). Detect the bleed-over and re-split + recurse — this never
+    // touches well-formed <li> lists, only broken plain-text captures.
+    if(!hasLi&&choices.length===1&&WARGEAR_OPENER_RE.test(choices[0])){
+      const subClauses=splitBundledWargearClauses(original);
+      if(subClauses.length>1){
+        for(const sc of subClauses) groups.push(...parseWargearOptions([sc]));
+        continue;
+      }
     }
 
     if(choices.length>=1){
