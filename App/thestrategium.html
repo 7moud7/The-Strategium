@@ -2718,6 +2718,42 @@ const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}};
 
 // ── STAT BLOCK ────────────────────────────────────────────────────────────────
+// Maps a raw stat value to a 1-5 "pip" level for the compact visual summary —
+// e.g. a Damage of 1 and a Damage of 6 both read at a glance without forcing
+// the player to parse an exact number every roll.
+function pipLevel(value,thresholds){
+  for(let i=0;i<thresholds.length;i++) if(value<=thresholds[i]) return i+1;
+  return thresholds.length+1;
+}
+function WeaponPip({label,level,color}){
+  return(
+    <div style={{textAlign:'center'}}>
+      <div style={{fontSize:7,color:'var(--text3)',letterSpacing:.5,marginBottom:3,textTransform:'uppercase'}}>{label}</div>
+      <div style={{display:'flex',gap:1,justifyContent:'center'}}>
+        {[1,2,3,4,5].map(i=>(
+          <div key={i} style={{width:6,height:12,background:i<=level?color:'var(--bg2)',border:`1px solid ${i<=level?color:'var(--border)'}`}}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+// Compact, number-free read on a weapon's profile — the default view in combat
+// rollers. Full exact numbers are gated behind "Ask the Commander" so players
+// judge threat at a glance instead of doing arithmetic on every attack.
+function WeaponPipSummary({attacksAvg,hitTarget,strength,ap,damageAvg,color}){
+  const pips=[
+    {label:'Volume',   level:pipLevel(attacksAvg,[1,2,3,5])},
+    {label:'Accuracy', level:pipLevel(7-(hitTarget||6),[1,2,3,4])},
+    {label:'Strength', level:pipLevel(strength,[3,5,7,10])},
+    {label:'Pierce',   level:pipLevel(-ap,[0,1,2,3])},
+    {label:'Damage',   level:pipLevel(damageAvg,[1,2,3,5])},
+  ];
+  return(
+    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6}}>
+      {pips.map(p=><WeaponPip key={p.label} label={p.label} level={p.level} color={color}/>)}
+    </div>
+  );
+}
 function StatBlock({models,compact}){
   if(!models?.length) return null;
   const STATS=[{k:'M',f:'m'},{k:'T',f:'t'},{k:'SV',f:'sv'},{k:'W',f:'w'},{k:'LD',f:'ld'},{k:'OC',f:'oc'}];
@@ -5714,6 +5750,10 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   const [manualStrMod,  setManualStrMod]  = React.useState(0);
   const [manualApMod,   setManualApMod]   = React.useState(0);
   const [showMods,      setShowMods]      = React.useState(false);
+  // Compact visual pips by default — exact numbers stay hidden until the
+  // player explicitly asks the Commander, so threat is read at a glance
+  // instead of parsed digit-by-digit on every single attack.
+  const [showFullStats, setShowFullStats] = React.useState(false);
 
   // Roll inputs — per wound-roll entry with model assignment
   const [numAtk,     setNumAtk]     = React.useState('');
@@ -6090,26 +6130,42 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
             <div style={{background:'var(--bg1)',border:`1px solid ${accentColor}40`,padding:'10px 12px',marginBottom:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
                 <div style={{fontFamily:"'Cinzel',serif",fontSize:12,color:accentColor}}>{effectiveWeapon.name}</div>
-                <button className="btn btn-xs btn-ghost" onClick={()=>setShowMods(v=>!v)} style={{fontSize:9}}>
-                  {showMods?'▲ Hide':'± Modifiers'}
-                </button>
+                <div style={{display:'flex',gap:4}}>
+                  <button className="btn btn-xs btn-ghost" onClick={()=>setShowFullStats(v=>!v)} style={{fontSize:9}}>
+                    {showFullStats?'▲ Hide Numbers':'🎖 Ask the Commander'}
+                  </button>
+                  <button className="btn btn-xs btn-ghost" onClick={()=>setShowMods(v=>!v)} style={{fontSize:9}}>
+                    {showMods?'▲ Hide':'± Modifiers'}
+                  </button>
+                </div>
               </div>
-              {/* Stat grid */}
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:3,textAlign:'center',marginBottom:6}}>
-                {[
-                  {label:'ATK', val:totalAtk!==baseAtk?`${totalAtk}*`:String(effectiveWeapon.attacks), mod:totalAtk!==baseAtk},
-                  {label:mode==='melee'?'WS':'BS', val:`${hitTarget}+`, mod:totalHitMod!==0},
-                  {label:'STR', val:manualStrMod!==0?`${strVal}*`:String(strVal), mod:manualStrMod!==0},
-                  {label:'AP',  val:totalAp, mod:manualApMod!==0},
-                  {label:'DMG', val:totalDmg!==baseDmg?`${totalDmg}*`:String(effectiveWeapon.damage), mod:totalDmg!==baseDmg},
-                ].map(s=>(
-                  <div key={s.label} style={{background:'var(--bg2)',padding:'4px 2px',border:`1px solid ${s.mod?accentColor:'var(--border)'}`,position:'relative'}}>
-                    <div style={{fontSize:7,color:'var(--text3)',letterSpacing:.5,marginBottom:1}}>{s.label}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:s.mod?accentColor:'var(--text)',fontFamily:"'Cinzel',serif"}}>{s.val}</div>
-                    {s.mod&&<div style={{fontSize:6,color:accentColor,position:'absolute',top:1,right:2}}>✦</div>}
-                  </div>
-                ))}
-              </div>
+              {/* Compact visual read by default; exact numbers only once the
+                  player asks the Commander for the full breakdown. */}
+              {!showFullStats?(
+                <WeaponPipSummary
+                  attacksAvg={avgDice(effectiveWeapon.attacks)+manualAtkMod}
+                  hitTarget={hitTarget}
+                  strength={strVal}
+                  ap={totalAp}
+                  damageAvg={avgDice(effectiveWeapon.damage)+manualDmgMod}
+                  color={accentColor}/>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:3,textAlign:'center',marginBottom:6}}>
+                  {[
+                    {label:'ATK', val:totalAtk!==baseAtk?`${totalAtk}*`:String(effectiveWeapon.attacks), mod:totalAtk!==baseAtk},
+                    {label:mode==='melee'?'WS':'BS', val:`${hitTarget}+`, mod:totalHitMod!==0},
+                    {label:'STR', val:manualStrMod!==0?`${strVal}*`:String(strVal), mod:manualStrMod!==0},
+                    {label:'AP',  val:totalAp, mod:manualApMod!==0},
+                    {label:'DMG', val:totalDmg!==baseDmg?`${totalDmg}*`:String(effectiveWeapon.damage), mod:totalDmg!==baseDmg},
+                  ].map(s=>(
+                    <div key={s.label} style={{background:'var(--bg2)',padding:'4px 2px',border:`1px solid ${s.mod?accentColor:'var(--border)'}`,position:'relative'}}>
+                      <div style={{fontSize:7,color:'var(--text3)',letterSpacing:.5,marginBottom:1}}>{s.label}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:s.mod?accentColor:'var(--text)',fontFamily:"'Cinzel',serif"}}>{s.val}</div>
+                      {s.mod&&<div style={{fontSize:6,color:accentColor,position:'absolute',top:1,right:2}}>✦</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* Weapon keywords — tap for explanation */}
               {weaponKws.length>0&&(
                 <div style={{display:'flex',flexWrap:'wrap',marginTop:4}}>
