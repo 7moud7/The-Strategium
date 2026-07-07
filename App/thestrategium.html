@@ -4574,7 +4574,7 @@ function BattlefieldImage({name}){
   );
 }
 
-function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
+function GameSetupScreen({armies,coreStrats,onStart,onCancel,onFixArmy}){
   const [step,setStep]=useState(1);
   const [showAbandonConfirm,setShowAbandonConfirm]=useState(false);
   function requestCancel(){
@@ -5139,37 +5139,48 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               const p1 = armies.find(a=>a.id===p1Army);
               const p2 = passPlay ? armies.find(a=>a.id===p2Army) : null;
               const getIssues = (army) => {
-                if(!army) return ['No army selected'];
+                if(!army) return [{msg:'No army selected'}];
                 const issues = [];
-                if(!army.warlordId) issues.push('No Warlord assigned');
+                if(!army.warlordId) issues.push({msg:'No Warlord assigned',armyId:army.id});
                 const noWargear = (army.units||[]).filter(e=>{
                   const g = parseWargearOptions(e.unit.options||[]);
                   return g.filter(x=>!x.fixed).length>0 && !e.wargear;
                 });
-                if(noWargear.length>0) issues.push(`${noWargear.length} unit(s) missing wargear`);
+                if(noWargear.length>0) issues.push({msg:`${noWargear.length} unit(s) missing wargear`,armyId:army.id});
                 return issues;
               };
               const p1Issues = getIssues(p1);
               const p2Issues = passPlay ? getIssues(p2) : [];
-              const allIssues = [...p1Issues.map(i=>`P1: ${i}`),...p2Issues.map(i=>`P2: ${i}`)];
-              // Mission validation
+              const allIssues = [...p1Issues.map(i=>({...i,label:`P1: ${i.msg}`})),...p2Issues.map(i=>({...i,label:`P2: ${i.msg}`}))];
+              // Mission validation — each issue records which step fixes it, so
+              // tapping it jumps straight there instead of leaving the player
+              // to hunt back through the wizard for the right screen.
               const missionIssues=[];
-              if(isPariahNexus&&!primaryMission) missionIssues.push('No Primary Mission selected (go back to Step 5)');
-              if(isPariahNexus&&!deployment) missionIssues.push('No Deployment Zone selected (go back to Step 6)');
+              if(isPariahNexus&&!primaryMission) missionIssues.push({msg:'No Primary Mission selected',step:5});
+              if(isPariahNexus&&!deployment) missionIssues.push({msg:'No Deployment Zone selected',step:6});
               // Every player must lock in exactly 2 Secondary Missions (drawn or hand-picked)
               // before the battle can begin — a battle with an empty hand can't be scored fairly.
               if(isPariahNexus){
-                if(p1Secondaries.length<2) missionIssues.push(`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
-                if(passPlay&&p2Secondaries.length<2) missionIssues.push(`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+                if(p1Secondaries.length<2) missionIssues.push({msg:`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected`,step:5});
+                if(passPlay&&p2Secondaries.length<2) missionIssues.push({msg:`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected`,step:5});
               }
               const canStart = !p1Issues.length && (!passPlay||!p2Issues.length) && !missionIssues.length;
               return(<>
-                {allIssues.length>0&&(
+                {(allIssues.length>0||missionIssues.length>0)&&(
                   <div style={{background:'var(--reddim)',border:'1px solid var(--red)',padding:'10px 14px',marginBottom:12}}>
-                    <div style={{fontSize:9,letterSpacing:2,color:'var(--redBright)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',marginBottom:6}}>Army Incomplete</div>
+                    <div style={{fontSize:9,letterSpacing:2,color:'var(--redBright)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',marginBottom:6}}>Cannot Begin Yet — Tap An Issue To Fix It</div>
                     {allIssues.map((iss,i)=>(
-                      <div key={i} style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2}}>
-                        <span style={{color:'var(--redBright)'}}>✗</span>{iss}
+                      <div key={'a'+i} onClick={iss.armyId&&onFixArmy?()=>onFixArmy(iss.armyId):undefined}
+                        style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2,alignItems:'center',cursor:iss.armyId&&onFixArmy?'pointer':'default'}}>
+                        <span style={{color:'var(--redBright)'}}>✗</span><span style={{flex:1}}>{iss.label}</span>
+                        {iss.armyId&&onFixArmy&&<span style={{fontSize:9,color:'var(--gold)',flexShrink:0}}>Fix →</span>}
+                      </div>
+                    ))}
+                    {missionIssues.map((iss,i)=>(
+                      <div key={'m'+i} onClick={iss.step?()=>setStep(iss.step):undefined}
+                        style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2,alignItems:'center',cursor:iss.step?'pointer':'default'}}>
+                        <span style={{color:'var(--redBright)'}}>✗</span><span style={{flex:1}}>{iss.msg}</span>
+                        {iss.step&&<span style={{fontSize:9,color:'var(--gold)',flexShrink:0}}>Go to Step {iss.step} →</span>}
                       </div>
                     ))}
                   </div>
@@ -5179,7 +5190,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
                   {hostBusy?'CREATING ROOM…':'BEGIN ENGAGEMENT'}
                 </button>
                 {hostErr&&<div style={{fontSize:10,color:'var(--redBright)',textAlign:'center',marginTop:6}}>{hostErr}</div>}
-                {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Resolve army issues above to begin</div>}
+                {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Tap an issue above to jump straight to fixing it</div>}
               </>);
             })()}
           </div>
@@ -5306,37 +5317,48 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
               const p1 = armies.find(a=>a.id===p1Army);
               const p2 = passPlay ? armies.find(a=>a.id===p2Army) : null;
               const getIssues = (army) => {
-                if(!army) return ['No army selected'];
+                if(!army) return [{msg:'No army selected'}];
                 const issues = [];
-                if(!army.warlordId) issues.push('No Warlord assigned');
+                if(!army.warlordId) issues.push({msg:'No Warlord assigned',armyId:army.id});
                 const noWargear = (army.units||[]).filter(e=>{
                   const g = parseWargearOptions(e.unit.options||[]);
                   return g.filter(x=>!x.fixed).length>0 && !e.wargear;
                 });
-                if(noWargear.length>0) issues.push(`${noWargear.length} unit(s) missing wargear`);
+                if(noWargear.length>0) issues.push({msg:`${noWargear.length} unit(s) missing wargear`,armyId:army.id});
                 return issues;
               };
               const p1Issues = getIssues(p1);
               const p2Issues = passPlay ? getIssues(p2) : [];
-              const allIssues = [...p1Issues.map(i=>`P1: ${i}`),...p2Issues.map(i=>`P2: ${i}`)];
-              // Mission validation
+              const allIssues = [...p1Issues.map(i=>({...i,label:`P1: ${i.msg}`})),...p2Issues.map(i=>({...i,label:`P2: ${i.msg}`}))];
+              // Mission validation — each issue records which step fixes it, so
+              // tapping it jumps straight there instead of leaving the player
+              // to hunt back through the wizard for the right screen.
               const missionIssues=[];
-              if(isPariahNexus&&!primaryMission) missionIssues.push('No Primary Mission selected (go back to Step 5)');
-              if(isPariahNexus&&!deployment) missionIssues.push('No Deployment Zone selected (go back to Step 6)');
+              if(isPariahNexus&&!primaryMission) missionIssues.push({msg:'No Primary Mission selected',step:5});
+              if(isPariahNexus&&!deployment) missionIssues.push({msg:'No Deployment Zone selected',step:6});
               // Every player must lock in exactly 2 Secondary Missions (drawn or hand-picked)
               // before the battle can begin — a battle with an empty hand can't be scored fairly.
               if(isPariahNexus){
-                if(p1Secondaries.length<2) missionIssues.push(`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
-                if(passPlay&&p2Secondaries.length<2) missionIssues.push(`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected (go back to Step 5)`);
+                if(p1Secondaries.length<2) missionIssues.push({msg:`${passPlay?'Player 1':'You'}: only ${p1Secondaries.length}/2 Secondary Missions selected`,step:5});
+                if(passPlay&&p2Secondaries.length<2) missionIssues.push({msg:`Player 2: only ${p2Secondaries.length}/2 Secondary Missions selected`,step:5});
               }
               const canStart = !p1Issues.length && (!passPlay||!p2Issues.length) && !missionIssues.length;
               return(<>
-                {allIssues.length>0&&(
+                {(allIssues.length>0||missionIssues.length>0)&&(
                   <div style={{background:'var(--reddim)',border:'1px solid var(--red)',padding:'10px 14px',marginBottom:12,marginTop:12}}>
-                    <div style={{fontSize:9,letterSpacing:2,color:'var(--redBright)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',marginBottom:6}}>Army Incomplete</div>
+                    <div style={{fontSize:9,letterSpacing:2,color:'var(--redBright)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',marginBottom:6}}>Cannot Begin Yet — Tap An Issue To Fix It</div>
                     {allIssues.map((iss,i)=>(
-                      <div key={i} style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2}}>
-                        <span style={{color:'var(--redBright)'}}>✗</span>{iss}
+                      <div key={'a'+i} onClick={iss.armyId&&onFixArmy?()=>onFixArmy(iss.armyId):undefined}
+                        style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2,alignItems:'center',cursor:iss.armyId&&onFixArmy?'pointer':'default'}}>
+                        <span style={{color:'var(--redBright)'}}>✗</span><span style={{flex:1}}>{iss.label}</span>
+                        {iss.armyId&&onFixArmy&&<span style={{fontSize:9,color:'var(--gold)',flexShrink:0}}>Fix →</span>}
+                      </div>
+                    ))}
+                    {missionIssues.map((iss,i)=>(
+                      <div key={'m'+i} onClick={iss.step?()=>setStep(iss.step):undefined}
+                        style={{fontSize:10,color:'var(--text2)',display:'flex',gap:6,marginBottom:2,alignItems:'center',cursor:iss.step?'pointer':'default'}}>
+                        <span style={{color:'var(--redBright)'}}>✗</span><span style={{flex:1}}>{iss.msg}</span>
+                        {iss.step&&<span style={{fontSize:9,color:'var(--gold)',flexShrink:0}}>Go to Step {iss.step} →</span>}
                       </div>
                     ))}
                   </div>
@@ -5346,7 +5368,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel}){
                   {hostBusy?'CREATING ROOM…':'BEGIN ENGAGEMENT'}
                 </button>
                 {hostErr&&<div style={{fontSize:10,color:'var(--redBright)',textAlign:'center',marginTop:6}}>{hostErr}</div>}
-                {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Resolve army issues above to begin</div>}
+                {!canStart&&<div style={{fontSize:10,color:'var(--text3)',textAlign:'center',marginTop:6}}>Tap an issue above to jump straight to fixing it</div>}
               </>);
             })()}
           </div>
@@ -10098,6 +10120,7 @@ function App(){
           coreStrats={coreStrats}
           onCancel={()=>setScreen('war-hub')}
           onStart={(battleData)=>{setBattle(battleData);setScreen('battle');}}
+          onFixArmy={(armyId)=>{setActiveId(armyId);setTab('roster');setScreen('army');}}
         />
       </div>
     );
