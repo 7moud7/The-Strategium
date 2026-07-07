@@ -854,6 +854,38 @@ async function geminiIdentifyImage(b64,mime,unitNames){
   return (reply||'').trim();
 }
 
+// Runs the Gemini-vision identify pass over one faction's repo photos, assigning
+// every photo it can confidently name to the matching datasheet (skips photos
+// already assigned to ANY unit, and units that already have a photo). Shared by
+// the per-faction picker (UnitDetailModal) and the all-factions batch runner
+// (Settings & Backup) so there's one matching implementation, not two.
+async function identifyFactionPhotos(factionId,units,imgs,{onProgress,cancelRef}={}){
+  let assigned=0;
+  const names=units.map(u=>stripHTML(u.name));
+  for(let i=0;i<imgs.length;i++){
+    if(cancelRef&&cancelRef.current) break;
+    onProgress?.(i+1,imgs.length,assigned);
+    const p=imgs[i];
+    const already=Object.entries(getUnitImageMap()).some(([k,v])=>v===p&&k.startsWith(factionId+':'));
+    if(already) continue;
+    try{
+      const resp=await fetch(IMAGES_BASE+encodeURI(p));
+      if(!resp.ok) continue;
+      const blob=await resp.blob();
+      if(blob.size>3_500_000) continue; // skip oversized files
+      const b64=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(blob);});
+      const answer=await geminiIdentifyImage(b64,blob.type,names);
+      if(answer&&answer.toUpperCase()!=='NONE'){
+        const hit=units.find(u=>stripHTML(u.name).toLowerCase()===answer.toLowerCase())
+          ||units.find(u=>answer.toLowerCase().includes(stripHTML(u.name).toLowerCase()));
+        // first photo wins — don't overwrite an existing assignment
+        if(hit&&!getUnitImageMap()[`${factionId}:${hit.id}`]){ setUnitImage(factionId,hit.id,p); assigned++; }
+      }
+    }catch(e){ /* skip unreadable/failed image */ }
+  }
+  return assigned;
+}
+
 // ── AGE OF SIGMAR DATA ──────────────────────────────────────────────────────
 // Warscroll JSON converted from the BSData age-of-sigmar-4th catalogues
 // (see AoS/Data/ in the repo). Same fetch-and-cache pattern as 40k data.
@@ -3070,31 +3102,12 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
     const idx=await loadImagesIndex();
     const imgs=idx[factionId]||[];
     const units=fdata?.units||[];
-    const names=units.map(u=>stripHTML(u.name));
-    if(!imgs.length||!names.length){ alert('No photos or unit list available for this faction.'); return; }
+    if(!imgs.length||!units.length){ alert('No photos or unit list available for this faction.'); return; }
     setAiBusy(true); aiCancelRef.current=false;
-    let assigned=0;
-    for(let i=0;i<imgs.length;i++){
-      if(aiCancelRef.current) break;
-      setAiProgress(`${i+1}/${imgs.length} — ${assigned} matched`);
-      const p=imgs[i];
-      const already=Object.entries(getUnitImageMap()).some(([k,v])=>v===p&&k.startsWith(factionId+':'));
-      if(already) continue;
-      try{
-        const resp=await fetch(IMAGES_BASE+encodeURI(p));
-        if(!resp.ok) continue;
-        const blob=await resp.blob();
-        if(blob.size>3_500_000) continue; // skip oversized files
-        const b64=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.readAsDataURL(blob);});
-        const answer=await geminiIdentifyImage(b64,blob.type,names);
-        if(answer&&answer.toUpperCase()!=='NONE'){
-          const hit=units.find(u=>stripHTML(u.name).toLowerCase()===answer.toLowerCase())
-            ||units.find(u=>answer.toLowerCase().includes(stripHTML(u.name).toLowerCase()));
-          // first photo wins — don't overwrite an existing assignment
-          if(hit&&!getUnitImageMap()[`${factionId}:${hit.id}`]){ setUnitImage(factionId,hit.id,p); assigned++; }
-        }
-      }catch(e){ /* skip unreadable/failed image */ }
-    }
+    const assigned=await identifyFactionPhotos(factionId,units,imgs,{
+      onProgress:(i,total,n)=>setAiProgress(`${i}/${total} — ${n} matched`),
+      cancelRef:aiCancelRef
+    });
     setAiProgress(`Done — ${assigned} new photo${assigned!==1?'s':''} assigned.`);
     setAiBusy(false); setImgVer(v=>v+1);
   }
@@ -9446,6 +9459,43 @@ function App(){
   const [geminiKeyDraft,setGeminiKeyDraft]=useState(getGeminiKey());
   const importInputRef=useRef(null);
   const BACKUP_KEYS=['wh40k_v3','wh40k_battles','wh40k_collection','wh40k_wishlist','wh40k_paintqueue','wh40k_metalists','wh40k_unitimages'];
+
+  // Auto-identify unit photos across EVERY faction in one pass (Settings & Backup),
+  // instead of running the AI matcher one faction at a time from the Armoury.
+  const [allIdBusy,setAllIdBusy]=useState(false);
+  const [allIdProgress,setAllIdProgress]=useState('');
+  const allIdCancelRef=useRef(false);
+  async function runAllFactionsIdentify(){
+    if(allIdBusy||!index) return;
+    if(!getGeminiKey()){ alert('Set your Gemini API key first (just below).'); return; }
+    setAllIdBusy(true); allIdCancelRef.current=false;
+    const imagesIdx=await loadImagesIndex();
+    const fids=Object.keys(index).filter(id=>!['UA','UN','TL'].includes(id));
+    let totalAssigned=0;
+    for(let fi=0;fi<fids.length;fi++){
+      if(allIdCancelRef.current) break;
+      const fid=fids[fi];
+      const imgs=imagesIdx[fid]||[];
+      if(!imgs.length) continue;
+      setAllIdProgress(`Faction ${fi+1}/${fids.length}: ${index[fid].name} — loading roster…`);
+      let units=[];
+      try{
+        const file=index[fid].file||fid.toLowerCase()+'.json';
+        const data=await fetchJSON(file);
+        units=data?.units||[];
+      }catch(e){ continue; }
+      if(!units.length) continue;
+      const assigned=await identifyFactionPhotos(fid,units,imgs,{
+        onProgress:(i,total,n)=>setAllIdProgress(`Faction ${fi+1}/${fids.length}: ${index[fid].name} — photo ${i}/${total} (${totalAssigned+n} total matched)`),
+        cancelRef:allIdCancelRef
+      });
+      totalAssigned+=assigned;
+    }
+    setAllIdProgress(allIdCancelRef.current
+      ? `Stopped — ${totalAssigned} new photo${totalAssigned!==1?'s':''} assigned before stopping.`
+      : `Done — ${totalAssigned} new photo${totalAssigned!==1?'s':''} assigned across all factions.`);
+    setAllIdBusy(false);
+  }
   function exportBackup(){
     const data={_app:'The Strategium',_version:1,_date:new Date().toISOString()};
     BACKUP_KEYS.forEach(k=>{data[k]=load(k,null);});
@@ -11471,10 +11521,20 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
           <input type="password" placeholder="Gemini API key…" value={geminiKeyDraft}
             onChange={e=>setGeminiKeyDraft(e.target.value)}
             style={{width:'100%',fontSize:11,marginBottom:6}}/>
-          <button className="btn btn-gold btn-sm" style={{width:'100%'}}
+          <button className="btn btn-gold btn-sm" style={{width:'100%',marginBottom:14}}
             onClick={()=>{setGeminiKey(geminiKeyDraft);alert(geminiKeyDraft.trim()?'API key saved on this device.':'API key cleared.');}}>
             Save API Key
           </button>
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Unit Photos</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
+            Look at every official kit photo in the repo (~900 across all factions) and match each one to its datasheet automatically, instead of doing it faction-by-faction from the Armoury. Uses your Gemini key above and can take a while — safe to stop and resume later.
+          </div>
+          <button className="btn btn-outline btn-sm" style={{width:'100%'}} disabled={allIdBusy||!index}
+            onClick={allIdBusy?()=>{allIdCancelRef.current=true;}:runAllFactionsIdentify}>
+            {allIdBusy?'Stop':'🔍 Auto-Identify Photos — All Factions'}
+          </button>
+          {allIdProgress&&<div style={{fontSize:9,color:'var(--brass)',marginTop:6,lineHeight:1.5}}>{allIdProgress}</div>}
         </div>
       </div>
     )}
