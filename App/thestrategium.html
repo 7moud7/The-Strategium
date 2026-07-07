@@ -990,8 +990,272 @@ const ARMY_RULES_FILES = {
 };
 const armyRulesCache = {};
 
-// SFX removed — silent mode
-function playSFX(key){ /* disabled */ }
+// ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
+// Everything here is either synthesised in real time with the Web Audio API
+// (oscillators/noise — no sampled or recorded audio, so nothing here can be a
+// copyrighted GW sound) or spoken through the browser's own built-in TTS
+// engine (window.speechSynthesis, using each commander's pitch/rate profile
+// derived from their existing in-app personality description — never a
+// recorded voice actor line). Three layers: SFX (short one-shots for game
+// events), ambient music (looping generative drone per faction/mood), and
+// commander speech (opt-in).
+const AUDIO_SETTINGS_KEY='wh40k_audio_settings';
+function loadAudioSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY));
+    if(s) return {master:0.7,music:0.5,sfx:0.85,voice:1,muted:false,voiceEnabled:false,...s};
+  }catch(e){}
+  return {master:0.7,music:0.5,sfx:0.85,voice:1,muted:false,voiceEnabled:false};
+}
+const AudioEngine={
+  ctx:null, master:null, musicGain:null, sfxGain:null,
+  _ambient:null, _duckTimer:null,
+  settings:loadAudioSettings(),
+  _ensure(){
+    if(this.ctx) return this.ctx;
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(!Ctx) return null;
+    this.ctx=new Ctx();
+    this.master=this.ctx.createGain();
+    this.musicGain=this.ctx.createGain();
+    this.sfxGain=this.ctx.createGain();
+    this.musicGain.connect(this.master);
+    this.sfxGain.connect(this.master);
+    this.master.connect(this.ctx.destination);
+    this._applyGains();
+    return this.ctx;
+  },
+  unlock(){
+    const ctx=this._ensure();
+    if(ctx&&ctx.state==='suspended') ctx.resume().catch(()=>{});
+  },
+  _applyGains(){
+    if(!this.ctx) return;
+    const m=this.settings.muted?0:this.settings.master;
+    this.master.gain.setTargetAtTime(m,this.ctx.currentTime,0.05);
+    this.musicGain.gain.setTargetAtTime(this.settings.music,this.ctx.currentTime,0.05);
+    this.sfxGain.gain.setTargetAtTime(this.settings.sfx,this.ctx.currentTime,0.05);
+  },
+  applySettings(patch){
+    this.settings={...this.settings,...patch};
+    try{localStorage.setItem(AUDIO_SETTINGS_KEY,JSON.stringify(this.settings));}catch(e){}
+    this._applyGains();
+    if(this.settings.muted) window.speechSynthesis?.cancel();
+    return this.settings;
+  },
+  // ── One-shot SFX — every sound below is a synthesised waveform, described
+  // by its acoustic character rather than reproducing any official audio. ──
+  playSFX(key){
+    const ctx=this._ensure();
+    if(!ctx||this.settings.muted) return;
+    if(ctx.state==='suspended') ctx.resume().catch(()=>{});
+    const t=ctx.currentTime;
+    const out=ctx.createGain();
+    out.connect(this.sfxGain);
+    const noiseBuf=(dur)=>{
+      const buf=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*dur)),ctx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+      return buf;
+    };
+    const tone=(freqStart,freqEnd,dur,type,peak,delay=0)=>{
+      const osc=ctx.createOscillator(); osc.type=type||'sine';
+      const g=ctx.createGain();
+      osc.frequency.setValueAtTime(freqStart,t+delay);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1,freqEnd),t+delay+dur);
+      g.gain.setValueAtTime(0.0001,t+delay);
+      g.gain.exponentialRampToValueAtTime(peak,t+delay+Math.min(0.02,dur*0.3));
+      g.gain.exponentialRampToValueAtTime(0.0001,t+delay+dur);
+      osc.connect(g); g.connect(out);
+      osc.start(t+delay); osc.stop(t+delay+dur+0.02);
+    };
+    const burst=(dur,peak,filterFreq,delay=0)=>{
+      const src=ctx.createBufferSource(); src.buffer=noiseBuf(dur);
+      const filt=ctx.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value=filterFreq; filt.Q.value=0.9;
+      const g=ctx.createGain();
+      g.gain.setValueAtTime(0.0001,t+delay);
+      g.gain.exponentialRampToValueAtTime(peak,t+delay+Math.min(0.015,dur*0.2));
+      g.gain.exponentialRampToValueAtTime(0.0001,t+delay+dur);
+      src.connect(filt); filt.connect(g); g.connect(out);
+      src.start(t+delay); src.stop(t+delay+dur+0.02);
+    };
+    switch(key){
+      case 'activate': case 'ui': tone(720,900,0.06,'triangle',0.18); break;
+      case 'phase': tone(300,520,0.22,'sine',0.22); tone(450,700,0.22,'sine',0.14,0.06); break;
+      case 'charge': tone(160,520,0.35,'sawtooth',0.16); burst(0.2,0.1,1400,0.05); break;
+      case 'wound': burst(0.09,0.22,900); break;
+      case 'destroy': burst(0.5,0.3,300); tone(180,40,0.5,'sawtooth',0.2); break;
+      case 'score': case 'vp': tone(520,780,0.15,'sine',0.2); tone(780,1040,0.18,'sine',0.18,0.1); break;
+      case 'cp': tone(440,660,0.12,'triangle',0.16); break;
+      case 'stratagem': tone(300,900,0.18,'square',0.1); break;
+      case 'diceRoll': for(let i=0;i<3;i++) burst(0.04,0.15,2000+i*400,i*0.05); break;
+      case 'bolter': for(let i=0;i<3;i++){ burst(0.05,0.28,700,i*0.06); tone(180,90,0.06,'square',0.12,i*0.06); } break;
+      case 'lasgun': tone(1800,600,0.12,'sawtooth',0.16); break;
+      case 'plasma': tone(500,1600,0.22,'sawtooth',0.2); burst(0.1,0.12,3000,0.15); break;
+      case 'melta': burst(0.35,0.28,500); tone(300,90,0.3,'sawtooth',0.18,0.02); break;
+      case 'flamer': burst(0.5,0.22,1200); burst(0.5,0.15,600,0.05); break;
+      case 'meleeChain': for(let i=0;i<4;i++) burst(0.05,0.16,1800+i*200,i*0.045); break;
+      case 'meleePower': tone(1200,300,0.1,'sawtooth',0.2); burst(0.08,0.14,2500,0.02); break;
+      case 'meleeBasic': burst(0.08,0.2,1000); break;
+      case 'heavyShot': burst(0.28,0.3,350); tone(150,60,0.3,'sawtooth',0.2); break;
+      case 'genericShot': burst(0.1,0.2,1200); break;
+      default: tone(500,650,0.1,'sine',0.15);
+    }
+  },
+  // ── Ambient — a looping, layered drone whose colour matches the army/mode
+  // on the table. Pure synthesis: detuned oscillator layers through a slowly
+  // swept filter, plus an optional filtered-noise "atmosphere" bed. ──
+  _palettes:{
+    imperium: {freqs:[65.4,98,130.8],wave:'sine',detune:6,filterFreq:900,lfoRate:0.04,lfoDepth:250,noise:0.03,gain:0.16},
+    chaos:    {freqs:[55,77.8,110],wave:'sawtooth',detune:22,filterFreq:500,lfoRate:0.11,lfoDepth:400,noise:0.06,gain:0.15},
+    ork:      {freqs:[49,73.4,98],wave:'sawtooth',detune:14,filterFreq:350,lfoRate:0.18,lfoDepth:200,noise:0.09,gain:0.17},
+    necron:   {freqs:[87.3,130.8,174.6],wave:'sine',detune:2,filterFreq:1400,lfoRate:0.02,lfoDepth:150,noise:0.015,gain:0.13},
+    tyranid:  {freqs:[41.2,61.7,92.5],wave:'sine',detune:18,filterFreq:400,lfoRate:0.09,lfoDepth:350,noise:0.08,gain:0.16},
+    aeldari:  {freqs:[110,164.8,220],wave:'triangle',detune:5,filterFreq:1600,lfoRate:0.03,lfoDepth:300,noise:0.02,gain:0.13},
+    tau:      {freqs:[98,146.8,196],wave:'triangle',detune:4,filterFreq:1200,lfoRate:0.05,lfoDepth:200,noise:0.02,gain:0.14},
+    aos_order:      {freqs:[73.4,110,146.8],wave:'sine',detune:6,filterFreq:1000,lfoRate:0.04,lfoDepth:250,noise:0.025,gain:0.15},
+    aos_chaos:      {freqs:[55,82.4,110],wave:'sawtooth',detune:20,filterFreq:480,lfoRate:0.1,lfoDepth:380,noise:0.07,gain:0.16},
+    aos_death:      {freqs:[49,65.4,98],wave:'sine',detune:10,filterFreq:600,lfoRate:0.025,lfoDepth:180,noise:0.05,gain:0.14},
+    aos_destruction:{freqs:[49,73.4,98],wave:'sawtooth',detune:16,filterFreq:340,lfoRate:0.15,lfoDepth:220,noise:0.08,gain:0.17},
+    menu:     {freqs:[65.4,98,130.8],wave:'sine',detune:4,filterFreq:800,lfoRate:0.03,lfoDepth:200,noise:0.02,gain:0.12},
+  },
+  startAmbient(paletteKey){
+    const ctx=this._ensure();
+    if(!ctx) return;
+    if(this._ambient&&this._ambient.key===paletteKey) return; // already playing this one
+    this.stopAmbient();
+    const p=this._palettes[paletteKey]||this._palettes.menu;
+    const t=ctx.currentTime;
+    const bus=ctx.createGain(); bus.gain.setValueAtTime(0.0001,t);
+    bus.gain.exponentialRampToValueAtTime(Math.max(0.0001,p.gain),t+2);
+    const filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=p.filterFreq; filt.Q.value=0.6;
+    filt.connect(bus); bus.connect(this.musicGain);
+    const oscillators=p.freqs.map((f,i)=>{
+      const osc=ctx.createOscillator(); osc.type=p.wave;
+      osc.frequency.value=f; osc.detune.value=(i-1)*p.detune;
+      osc.connect(filt); osc.start(t);
+      return osc;
+    });
+    const lfo=ctx.createOscillator(); lfo.frequency.value=p.lfoRate;
+    const lfoGain=ctx.createGain(); lfoGain.gain.value=p.lfoDepth;
+    lfo.connect(lfoGain); lfoGain.connect(filt.frequency); lfo.start(t);
+    let noiseSrc=null,noiseGain=null;
+    if(p.noise>0){
+      const buf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
+      const d=buf.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+      noiseSrc=ctx.createBufferSource(); noiseSrc.buffer=buf; noiseSrc.loop=true;
+      const noiseFilt=ctx.createBiquadFilter(); noiseFilt.type='bandpass'; noiseFilt.frequency.value=p.filterFreq*1.5; noiseFilt.Q.value=0.5;
+      noiseGain=ctx.createGain(); noiseGain.gain.value=p.noise;
+      noiseSrc.connect(noiseFilt); noiseFilt.connect(noiseGain); noiseGain.connect(bus);
+      noiseSrc.start(t);
+    }
+    this._ambient={key:paletteKey,bus,filt,lfo,oscillators,noiseSrc,baseGain:p.gain,baseFilter:p.filterFreq};
+  },
+  stopAmbient(){
+    if(!this._ambient||!this.ctx) return;
+    const {bus,oscillators,lfo,noiseSrc}=this._ambient;
+    const t=this.ctx.currentTime;
+    try{
+      bus.gain.setTargetAtTime(0.0001,t,0.4);
+      setTimeout(()=>{
+        oscillators.forEach(o=>{try{o.stop();}catch(e){}});
+        try{lfo.stop();}catch(e){}
+        try{noiseSrc&&noiseSrc.stop();}catch(e){}
+      },900);
+    }catch(e){}
+    this._ambient=null;
+  },
+  // Nudges the ambient bed slightly more intense as a battle progresses
+  // (round 1→5): a touch louder and a touch brighter, never jarring.
+  setIntensity(v){
+    if(!this._ambient||!this.ctx) return;
+    const c=Math.max(0,Math.min(1,v));
+    const t=this.ctx.currentTime;
+    this._ambient.bus.gain.setTargetAtTime(this._ambient.baseGain*(1+c*0.4),t,1.5);
+    this._ambient.filt.frequency.setTargetAtTime(this._ambient.baseFilter*(1+c*0.3),t,1.5);
+  },
+  // ── Commander speech — browser TTS only, never a recorded voice line. ──
+  _duckMusic(active){
+    if(!this._ambient) return;
+    const t=this.ctx.currentTime;
+    this._ambient.bus.gain.setTargetAtTime(active?this._ambient.baseGain*0.35:this._ambient.baseGain,t,0.3);
+  },
+  speak(text,profile={}){
+    if(!text||this.settings.muted||!this.settings.voiceEnabled) return;
+    if(!('speechSynthesis' in window)) return;
+    try{
+      window.speechSynthesis.cancel();
+      const u=new SpeechSynthesisUtterance(String(text).replace(/[*_`]/g,''));
+      u.pitch=Math.max(0,Math.min(2,profile.pitch??1));
+      u.rate=Math.max(0.5,Math.min(2,profile.rate??1));
+      u.volume=Math.max(0,Math.min(1,this.settings.voice*this.settings.master));
+      const voices=window.speechSynthesis.getVoices();
+      const en=voices.filter(v=>/^en/i.test(v.lang));
+      if(en.length) u.voice=en[0];
+      this._duckMusic(true);
+      u.onend=u.onerror=()=>this._duckMusic(false);
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  },
+};
+if(typeof document!=='undefined'){
+  const unlockOnce=()=>{ AudioEngine.unlock(); document.removeEventListener('pointerdown',unlockOnce); document.removeEventListener('keydown',unlockOnce); };
+  document.addEventListener('pointerdown',unlockOnce);
+  document.addEventListener('keydown',unlockOnce);
+}
+function playSFX(key){ AudioEngine.playSFX(key); }
+// Maps a weapon to an SFX category by acoustic archetype (name/keyword
+// heuristics) — not a 1:1 datasheet lookup, just enough to sound distinct.
+function weaponSfxKey(weapon){
+  if(!weapon) return 'genericShot';
+  const n=(weapon.name||'').toLowerCase();
+  const isMelee=(weapon.type||'').toLowerCase()==='melee';
+  if(isMelee){
+    if(/chain/.test(n)) return 'meleeChain';
+    if(/power|force|claw|talon|fist|maul|hammer/.test(n)) return 'meleePower';
+    return 'meleeBasic';
+  }
+  if(/plasma/.test(n)) return 'plasma';
+  if(/melta/.test(n)) return 'melta';
+  if(/flamer|torrent|promethium/.test(n)) return 'flamer';
+  if(/bolt/.test(n)) return 'bolter';
+  if(/las/.test(n)) return 'lasgun';
+  if(/cannon|missile|rocket|launcher/.test(n)) return 'heavyShot';
+  return 'genericShot';
+}
+// Derives a rough TTS pitch/rate from a commander's already-written personality
+// description — no new voice-acting content, just reading the existing text.
+function deriveVoiceProfile(commander){
+  const text=(((commander?.personality||'')+' '+(commander?.title||'')+' '+(commander?.name||''))).toLowerCase();
+  const has=w=>text.includes(w);
+  let pitch=1, rate=1;
+  if(has('ancient')||has('cosmic')||has('godlike')||has('grand')) pitch-=0.22;
+  if(has('metallic')||has('iron')||has('brutal')||has('stone')||has('massive')||has('loud')) pitch-=0.15;
+  if(has('deathly')||has('rasp')||has('bitter')||has('gestalt')||has('hunger')||has('plural')) pitch-=0.2;
+  if(has('cryptic')||has('precise')||has('elegant')||has('refined')||has('decadent')||has('idealistic')) pitch+=0.1;
+  if(has('fanatical')||has('roaring')||has('fury')||has('enthusiasm')||has('boisterous')||has('speed')||has('wit')) rate+=0.15;
+  if(has('weary')||has('melancholic')||has('hushed')||has('poetic')||has('tired')||has('ancient')||has('cosmic')||has('glacial')) rate-=0.15;
+  if(has('cold')||has('calculating')||has('stoic')||has('methodical')) rate-=0.05;
+  return {pitch:Math.max(0.6,Math.min(1.3,pitch)),rate:Math.max(0.7,Math.min(1.3,rate))};
+}
+// Resolves a 40k faction id (or AoS grand alliance keyword) to an ambient palette.
+function ambientPaletteFor(factionId,factionName){
+  const CHAOS=new Set(['CSM','CD','DG','TS','WE','EC','QT']);
+  if(factionId==='ORK') return 'ork';
+  if(factionId==='NEC') return 'necron';
+  if(factionId==='TYR'||factionId==='GC') return 'tyranid';
+  if(factionId==='AE'||factionId==='DRU') return 'aeldari';
+  if(factionId==='TAU'||factionId==='TU') return 'tau';
+  if(CHAOS.has(factionId)) return 'chaos';
+  if(factionId) return 'imperium';
+  // AoS fallback — guess grand alliance from the faction name
+  const n=(factionName||'').toLowerCase();
+  if(/khorne|tzeentch|nurgle|slaanesh|chaos|beasts of chaos|skaven/.test(n)) return 'aos_chaos';
+  if(/nighthaunt|ossiarch|flesh-eater|soulblight|death/.test(n)) return 'aos_death';
+  if(/ironjawz|kruleboyz|gloomspite|bonesplitterz|ogor|orruk|destruction/.test(n)) return 'aos_destruction';
+  return 'aos_order';
+}
 
 async function loadArmyRules(factionId) {
   if (!factionId) return null;
@@ -6016,6 +6280,7 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   }
 
   function handleApply(){
+    playSFX(weaponSfxKey(effectiveWeapon));
     resolveAndClose();
     setResolved(true);
     if(triggerReaction) triggerReaction(isShoot?'shooting_resolved':'melee_resolved', stripHTML(unit.name));
@@ -7305,6 +7570,14 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   const [activePlayer,setActivePlayer]=useState(sv.activePlayer||firstPlayer);
   const [phase,setPhase]=useState(sv.phase||0);
 
+  // Ambient battle music — a generative drone whose colour matches Player 1's
+  // army/mood, running for the whole battle; intensity nudges up as rounds pass.
+  React.useEffect(()=>{
+    AudioEngine.startAmbient(ambientPaletteFor(p1Army?.factionId,p1Army?.factionName));
+    return ()=>AudioEngine.stopAmbient();
+  },[p1Army?.factionId]);
+  React.useEffect(()=>{ AudioEngine.setIntensity((round-1)/4); },[round]);
+
   // Per-player state
   const [cp,setCP]=useState(sv.cp||{p1:0,p2:0});
   const [vp,setVP]=useState(sv.vp||{p1:0,p2:0,p1sec:0,p2sec:0});
@@ -7623,6 +7896,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
         60, 1.0
       );
       setCmdReaction(prev=>prev&&prev.thinking?{...prev,text:text||'...',thinking:false}:prev);
+      if(text) AudioEngine.speak(text,deriveVoiceProfile(speaker));
     }catch(e){
       console.error('Gemini reaction error:',e);
       setCmdReaction(prev=>prev&&prev.thinking?{...prev,text:'Vox-link disrupted — hold position.',thinking:false}:prev);
@@ -9422,6 +9696,10 @@ function App(){
   const [coreStrats,setCoreStrats]=useState([]);
   const [screen,setScreen]=useState('armies');
   const [tab,setTab]=useState('roster');
+  // Ambient soundtrack for everywhere that isn't a live battle (menu, Armoury,
+  // Collection, setup screens); BattleScreen takes over with its own
+  // faction-coloured palette while a battle is open, then this resumes.
+  React.useEffect(()=>{ if(screen!=='battle') AudioEngine.startAmbient('menu'); },[screen]);
   const [fdata,setFdata]=useState(null);
   const [floading,setFloading]=useState(false);
   const [smChapter,setSmChapter]=useState('generic');
@@ -9515,6 +9793,10 @@ function App(){
   const [geminiKeyDraft,setGeminiKeyDraft]=useState(getGeminiKey());
   const importInputRef=useRef(null);
   const BACKUP_KEYS=['wh40k_v3','wh40k_battles','wh40k_collection','wh40k_wishlist','wh40k_paintqueue','wh40k_metalists','wh40k_unitimages'];
+
+  // Audio settings mirror AudioEngine.settings for the Settings & Backup sliders.
+  const [audioSettings,setAudioSettings]=useState(AudioEngine.settings);
+  function updateAudio(patch){ setAudioSettings(AudioEngine.applySettings(patch)); }
 
   // Auto-identify unit photos across EVERY faction in one pass (Settings & Backup),
   // instead of running the AI matcher one faction at a time from the Armoury.
@@ -11591,6 +11873,34 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
             {allIdBusy?'Stop':'🔍 Auto-Identify Photos — All Factions'}
           </button>
           {allIdProgress&&<div style={{fontSize:9,color:'var(--brass)',marginTop:6,lineHeight:1.5}}>{allIdProgress}</div>}
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Audio</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
+            Ambient soundtrack, weapon/event sound effects and Commander speech — all generated on-device, nothing recorded or streamed.
+          </div>
+          <button className="btn btn-outline btn-sm" style={{width:'100%',marginBottom:8}}
+            onClick={()=>updateAudio({muted:!audioSettings.muted})}>
+            {audioSettings.muted?'🔇 Unmute All Audio':'🔊 Mute All Audio'}
+          </button>
+          {[
+            {key:'master',label:'Master Volume'},
+            {key:'music',label:'Ambient Music'},
+            {key:'sfx',label:'Sound Effects'},
+            {key:'voice',label:'Commander Voice'},
+          ].map(s=>(
+            <div key={s.key} style={{marginBottom:8,opacity:audioSettings.muted?0.5:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)',marginBottom:3}}>
+                <span>{s.label}</span><span>{Math.round(audioSettings[s.key]*100)}%</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" value={audioSettings[s.key]} disabled={audioSettings.muted}
+                onChange={e=>updateAudio({[s.key]:parseFloat(e.target.value)})}
+                style={{width:'100%'}}/>
+            </div>
+          ))}
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:10,color:'var(--text2)',marginTop:4,cursor:'pointer'}}>
+            <input type="checkbox" checked={audioSettings.voiceEnabled} onChange={e=>updateAudio({voiceEnabled:e.target.checked})}/>
+            Speak Commander reactions aloud (uses this browser's built-in text-to-speech)
+          </label>
         </div>
       </div>
     )}
