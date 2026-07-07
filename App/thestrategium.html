@@ -756,6 +756,94 @@ function unitImageURL(fid,uid){
   const p=getUnitImageMap()[`${fid}:${uid}`];
   return p?IMAGES_BASE+encodeURI(p):null;
 }
+// ── CUSTOM UNIT PHOTOS (your own camera shots) ──────────────────────────────
+// Stored in IndexedDB rather than localStorage: photos are large binary data
+// and localStorage's ~5-10MB total quota would fill up after a handful of
+// shots. IndexedDB has no such practical ceiling. This means custom photos
+// stay on THIS device only — they are not included in the JSON backup
+// (Settings → Export), which is deliberately kept small and text-only.
+const PHOTO_DB_NAME='wh40k_photos_db', PHOTO_STORE='photos';
+function openPhotoDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(PHOTO_DB_NAME,1);
+    req.onupgradeneeded=()=>{ req.result.createObjectStore(PHOTO_STORE); };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbGetPhoto(key){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(PHOTO_STORE,'readonly');
+    const req=tx.objectStore(PHOTO_STORE).get(key);
+    req.onsuccess=()=>resolve(req.result||null);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbSetPhoto(key,dataURL){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(PHOTO_STORE,'readwrite');
+    tx.objectStore(PHOTO_STORE).put(dataURL,key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function idbDeletePhoto(key){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(PHOTO_STORE,'readwrite');
+    tx.objectStore(PHOTO_STORE).delete(key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+function getCustomPhoto(fid,uid){ return idbGetPhoto(`${fid}:${uid}`); }
+function saveCustomPhoto(fid,uid,dataURL){ return idbSetPhoto(`${fid}:${uid}`,dataURL); }
+function deleteCustomPhoto(fid,uid){ return idbDeletePhoto(`${fid}:${uid}`); }
+
+// Read a File/Blob into a base64 data URL
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(String(r.result));
+    r.onerror=()=>reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+// AI background removal — Gemini's image-editing model. This is a SEPARATE
+// capability/quota from the text model used for the Commander (some Gemini
+// accounts have image generation disabled or on a paid tier only), so this
+// call is expected to sometimes fail even when the Commander works fine —
+// the caller shows that distinction rather than a generic error.
+const GEMINI_IMAGE_MODEL='gemini-2.5-flash-image';
+async function geminiRemoveBackground(dataURL){
+  const key=getGeminiKey();
+  if(!key) throw new Error('No Gemini API key set — add one in Menu → Settings & Backup');
+  const m=dataURL.match(/^data:([^;]+);base64,(.+)$/);
+  if(!m) throw new Error('Invalid image data');
+  const [,mime,b64]=m;
+  const url=`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${key}`;
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    contents:[{role:'user',parts:[
+      {inline_data:{mime_type:mime,data:b64}},
+      {text:'This is a photo of a hand-painted tabletop miniature. Remove the background completely and replace it with a clean, soft, neutral light-grey studio gradient — the same style Games Workshop uses for official product photography. Do NOT alter, retouch, repaint, recolour, or otherwise modify the miniature itself in any way: keep the paint job, pose, sculpt, and every detail exactly as photographed. Output only the edited image, nothing else.'}
+    ]}],
+    generationConfig:{responseModalities:['IMAGE']},
+  })});
+  if(!r.ok){
+    const body=await r.text();
+    if(r.status===429||/RESOURCE_EXHAUSTED/.test(body)) throw new Error('Image editing quota exhausted on this Gemini key (this is billed/limited separately from text chat) — the raw photo has been kept instead.');
+    throw new Error(`Gemini image edit failed (${r.status}): ${body.slice(0,150)}`);
+  }
+  const d=await r.json();
+  const part=(d.candidates?.[0]?.content?.parts||[]).find(p=>p.inline_data||p.inlineData);
+  const inline=part?.inline_data||part?.inlineData;
+  if(!inline) throw new Error('Gemini did not return an edited image');
+  return `data:${inline.mime_type||inline.mimeType||'image/png'};base64,${inline.data}`;
+}
+
 // Vision call: kit photo + candidate list → datasheet name
 async function geminiIdentifyImage(b64,mime,unitNames){
   const contents=[{role:'user',parts:[
@@ -2920,19 +3008,59 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
   const rangedWeps=(unit.weapons||[]).filter(w=>w.type==='Ranged');
   const meleeWeps=(unit.weapons||[]).filter(w=>w.type==='Melee');
 
-  // ── Unit photo (mapped from the repo's kit photo library) ──
+  // ── Unit photo (repo kit photo, OR your own captured photo) ──
   const [imgVer,setImgVer]=React.useState(0);
   const [showPhotoPicker,setShowPhotoPicker]=React.useState(false);
   const [pickerImages,setPickerImages]=React.useState(null);
   const [aiBusy,setAiBusy]=React.useState(false);
   const [aiProgress,setAiProgress]=React.useState('');
   const aiCancelRef=React.useRef(false);
-  const photoURL=unitImageURL(factionId,unit.id);
+  const repoPhotoURL=unitImageURL(factionId,unit.id);
+
+  // Your own camera/gallery photo of THIS specific model, stored locally
+  // (IndexedDB) on this device. Takes priority over the repo's stock photo.
+  const [customPhoto,setCustomPhoto]=React.useState(null);      // saved photo, data URL
+  const [capturePreview,setCapturePreview]=React.useState(null); // just-picked, unsaved
+  const [bgBusy,setBgBusy]=React.useState(false);
+  const [bgErr,setBgErr]=React.useState(null);
+  const fileInputRef=React.useRef(null);
+  React.useEffect(()=>{
+    let alive=true;
+    getCustomPhoto(factionId,unit.id).then(p=>{ if(alive) setCustomPhoto(p); }).catch(()=>{});
+    return ()=>{alive=false;};
+  },[factionId,unit.id,imgVer]);
+
+  const photoURL=customPhoto||repoPhotoURL;
 
   async function openPhotoPicker(){
     setShowPhotoPicker(true);
+    setCapturePreview(null); setBgErr(null);
     const idx=await loadImagesIndex();
     setPickerImages(idx[factionId]||[]);
+  }
+  async function onPickFile(e){
+    const file=e.target.files?.[0];
+    e.target.value='';
+    if(!file) return;
+    setBgErr(null);
+    try{ setCapturePreview(await fileToDataURL(file)); }
+    catch(err){ setBgErr('Could not read that photo.'); }
+  }
+  async function applyBgRemoval(){
+    if(!capturePreview||bgBusy) return;
+    setBgBusy(true); setBgErr(null);
+    try{ setCapturePreview(await geminiRemoveBackground(capturePreview)); }
+    catch(err){ setBgErr(String(err.message||err)); }
+    finally{ setBgBusy(false); }
+  }
+  async function saveCapture(){
+    if(!capturePreview) return;
+    await saveCustomPhoto(factionId,unit.id,capturePreview);
+    setCapturePreview(null); setImgVer(v=>v+1); setShowPhotoPicker(false);
+  }
+  async function removeCustomPhotoNow(){
+    await deleteCustomPhoto(factionId,unit.id);
+    setImgVer(v=>v+1);
   }
   // Gemini-vision pass over this faction's photos: assigns every photo it can
   // confidently name to the matching datasheet (skips already-assigned ones).
@@ -3012,6 +3140,44 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
                 </div>
               </div>
               {aiProgress&&<div style={{fontSize:9,color:'var(--brass)',marginBottom:6}}>{aiProgress}</div>}
+
+              {/* ── Your own photo of this exact model ── */}
+              <div style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',padding:10,marginBottom:10}}>
+                <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:6}}>Your Own Photo</div>
+                <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPickFile}/>
+                {!capturePreview?(
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {customPhoto&&(
+                      <img src={customPhoto} alt="" style={{width:52,height:52,objectFit:'cover',border:'1px solid var(--gold)',flexShrink:0}}/>
+                    )}
+                    <div style={{display:'flex',flexDirection:'column',gap:5,flex:1}}>
+                      <button className="btn btn-gold btn-sm" onClick={()=>fileInputRef.current?.click()}>
+                        📷 {customPhoto?'Retake / Choose Another':'Take or Choose Photo'}
+                      </button>
+                      {customPhoto&&(
+                        <button className="btn btn-outline btn-xs" onClick={removeCustomPhotoNow}>Remove My Photo</button>
+                      )}
+                    </div>
+                  </div>
+                ):(
+                  <div>
+                    <img src={capturePreview} alt="" style={{width:'100%',maxHeight:220,objectFit:'contain',background:'var(--bg0)',border:'1px solid var(--border)',marginBottom:6}}/>
+                    {bgErr&&<div style={{fontSize:9,color:'var(--redBright)',marginBottom:6,lineHeight:1.5}}>{bgErr}</div>}
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn btn-outline btn-sm" disabled={bgBusy} onClick={applyBgRemoval} style={{flex:1}}>
+                        {bgBusy?'Processing…':'✨ Remove Background (AI)'}
+                      </button>
+                      <button className="btn btn-gold btn-sm" onClick={saveCapture} style={{flex:1}}>Save Photo</button>
+                      <button className="btn btn-ghost btn-xs" onClick={()=>{setCapturePreview(null);setBgErr(null);}}>Discard</button>
+                    </div>
+                    <div style={{fontSize:8,color:'var(--text3)',marginTop:5,lineHeight:1.5}}>
+                      Background removal edits the photo only — it never repaints or alters the miniature. Requires image-generation access on your Gemini key (separate from the Commander's text quota).
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:6}}>Official Kit Photos</div>
               <div style={{flex:1,overflowY:'auto',display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(86px,1fr))',gap:6}}>
                 {pickerImages===null&&<div className="spinner"/>}
                 {pickerImages?.length===0&&<div style={{fontSize:10,color:'var(--text3)'}}>No photos for this faction in the repo.</div>}
@@ -7211,6 +7377,45 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   const [actionLog,setActionLog]=useState([]); // [{id,round,phase,player,unitName,action,detail,vpDelta,undoFn}]
   const [stratForUnit,setStratForUnit]=useState(null); // entry — show strat picker for this unit
   const [unitDetailModal,setUnitDetailModal]=useState(null); // entry — show full unit detail from battlefield
+  // Photo shown in the battlefield unit-detail modal — same priority as the
+  // Armoury's UnitDetailModal (your own captured photo, else the repo stock photo).
+  const [battleModalPhoto,setBattleModalPhoto]=useState(null);
+  const [battleModalPickerOpen,setBattleModalPickerOpen]=useState(false);
+  const [battleModalCapture,setBattleModalCapture]=useState(null);
+  const [battleModalBgBusy,setBattleModalBgBusy]=useState(false);
+  const [battleModalBgErr,setBattleModalBgErr]=useState(null);
+  const battleModalFileRef=React.useRef(null);
+  React.useEffect(()=>{
+    if(!unitDetailModal){ setBattleModalPhoto(null); return; }
+    let alive=true;
+    getCustomPhoto(unitDetailModal._armyFactionId,unitDetailModal.unit.id).then(p=>{ if(alive) setBattleModalPhoto(p); });
+    return ()=>{alive=false;};
+  },[unitDetailModal]);
+  async function battleOnPickFile(e){
+    const file=e.target.files?.[0];
+    e.target.value='';
+    if(!file) return;
+    setBattleModalBgErr(null);
+    try{ setBattleModalCapture(await fileToDataURL(file)); }
+    catch(err){ setBattleModalBgErr('Could not read that photo.'); }
+  }
+  async function battleApplyBgRemoval(){
+    if(!battleModalCapture||battleModalBgBusy) return;
+    setBattleModalBgBusy(true); setBattleModalBgErr(null);
+    try{ setBattleModalCapture(await geminiRemoveBackground(battleModalCapture)); }
+    catch(err){ setBattleModalBgErr(String(err.message||err)); }
+    finally{ setBattleModalBgBusy(false); }
+  }
+  async function battleSaveCapture(){
+    if(!battleModalCapture||!unitDetailModal) return;
+    await saveCustomPhoto(unitDetailModal._armyFactionId,unitDetailModal.unit.id,battleModalCapture);
+    setBattleModalPhoto(battleModalCapture); setBattleModalCapture(null); setBattleModalPickerOpen(false);
+  }
+  async function battleRemoveCustomPhotoNow(){
+    if(!unitDetailModal) return;
+    await deleteCustomPhoto(unitDetailModal._armyFactionId,unitDetailModal.unit.id);
+    setBattleModalPhoto(null);
+  }
   const [fightUnit,setFightUnit]=useState(null); // entry — show melee attack roller
   // Fight phase priority tracking (per rules doc)
   // Priority 1: Fights First (charged this turn OR has FightsFirst ability)
@@ -8332,7 +8537,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                             color:isDestroyed?'var(--text3)':isActivated?'var(--greenBright)':'var(--text)',
                             textDecoration:isDestroyed?'line-through':'underline dotted rgba(200,168,75,.4)',
                             marginBottom:1,cursor:'pointer'}}
-                            onClick={()=>setUnitDetailModal(entry)}
+                            onClick={()=>setUnitDetailModal({...entry,_armyFactionId:army.factionId})}
                             title="Tap to view stats, weapons & abilities">{stripHTML(u.name)}</div>
                           {/* Model count from sizeIdx */}
                           {(()=>{
@@ -8932,10 +9137,63 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       {unitDetailModal&&(
         <div className="modal-overlay" onClick={()=>setUnitDetailModal(null)}>
           <div className="modal anim-slide-up" style={{maxWidth:440,maxHeight:'88vh',display:'flex',flexDirection:'column'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <div className="modal-title" style={{marginBottom:0}}>{stripHTML(unitDetailModal.unit.name)}</div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:8}}>
+              {(()=>{const photoURL=battleModalPhoto||unitImageURL(unitDetailModal._armyFactionId,unitDetailModal.unit.id);return photoURL&&(
+                <img src={photoURL} alt="" onClick={()=>setBattleModalPickerOpen(true)}
+                  style={{width:48,height:48,objectFit:'cover',border:'1px solid var(--goldborder)',flexShrink:0,cursor:'pointer'}}
+                  onError={e=>{e.target.style.display='none';}}/>
+              );})()}
+              <div style={{flex:1,minWidth:0}}>
+                <div className="modal-title" style={{marginBottom:2}}>{stripHTML(unitDetailModal.unit.name)}</div>
+                <span onClick={()=>setBattleModalPickerOpen(true)} style={{fontSize:8,padding:'1px 6px',border:'1px solid var(--border)',color:'var(--text3)',cursor:'pointer',letterSpacing:.5}}>
+                  📷 {(battleModalPhoto||unitImageURL(unitDetailModal._armyFactionId,unitDetailModal.unit.id))?'change photo':'assign photo'}
+                </span>
+              </div>
               <button className="btn btn-ghost btn-xs" onClick={()=>setUnitDetailModal(null)}>✕</button>
             </div>
+
+            {/* Photo capture picker (your own photo of this model) */}
+            {battleModalPickerOpen&&(
+              <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.92)',display:'flex',flexDirection:'column',padding:12}}
+                onClick={e=>e.target===e.currentTarget&&setBattleModalPickerOpen(false)}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',letterSpacing:1}}>Photo — {stripHTML(unitDetailModal.unit.name)}</div>
+                  <button className="btn btn-ghost btn-xs" onClick={()=>setBattleModalPickerOpen(false)}>✕</button>
+                </div>
+                <input ref={battleModalFileRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={battleOnPickFile}/>
+                <div style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',padding:10}}>
+                  <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:6}}>Your Own Photo</div>
+                  {!battleModalCapture?(
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      {battleModalPhoto&&(
+                        <img src={battleModalPhoto} alt="" style={{width:52,height:52,objectFit:'cover',border:'1px solid var(--gold)',flexShrink:0}}/>
+                      )}
+                      <div style={{display:'flex',flexDirection:'column',gap:5,flex:1}}>
+                        <button className="btn btn-gold btn-sm" onClick={()=>battleModalFileRef.current?.click()}>
+                          📷 {battleModalPhoto?'Retake / Choose Another':'Take or Choose Photo'}
+                        </button>
+                        {battleModalPhoto&&(
+                          <button className="btn btn-outline btn-xs" onClick={battleRemoveCustomPhotoNow}>Remove My Photo</button>
+                        )}
+                      </div>
+                    </div>
+                  ):(
+                    <div>
+                      <img src={battleModalCapture} alt="" style={{width:'100%',maxHeight:220,objectFit:'contain',background:'var(--bg0)',border:'1px solid var(--border)',marginBottom:6}}/>
+                      {battleModalBgErr&&<div style={{fontSize:9,color:'var(--redBright)',marginBottom:6,lineHeight:1.5}}>{battleModalBgErr}</div>}
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <button className="btn btn-outline btn-sm" disabled={battleModalBgBusy} onClick={battleApplyBgRemoval} style={{flex:1}}>
+                          {battleModalBgBusy?'Processing…':'✨ Remove Background (AI)'}
+                        </button>
+                        <button className="btn btn-gold btn-sm" onClick={battleSaveCapture} style={{flex:1}}>Save Photo</button>
+                        <button className="btn btn-ghost btn-xs" onClick={()=>{setBattleModalCapture(null);setBattleModalBgErr(null);}}>Discard</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div style={{flex:1,overflowY:'auto'}}>
               {/* Keywords */}
               {(unitDetailModal.unit.keywords||[]).length>0&&(
@@ -11167,11 +11425,14 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                 ?<span style={{color:'#ddcc44'}}>not granted — export a backup now and then; adding this page to your Home Screen usually grants it</span>
                 :'checking…'}
           </div>
-          <div style={{display:'flex',gap:8,marginBottom:14}}>
+          <div style={{display:'flex',gap:8,marginBottom:6}}>
             <button className="btn btn-gold btn-sm" style={{flex:1}} onClick={exportBackup}>⇩ Export Backup</button>
             <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>importInputRef.current?.click()}>⇧ Restore Backup</button>
             <input ref={importInputRef} type="file" accept=".json,application/json" style={{display:'none'}}
               onChange={e=>{importBackup(e.target.files?.[0]);e.target.value='';}}/>
+          </div>
+          <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginBottom:14}}>
+            Note: photos you've taken of your own models are stored separately on this device and are NOT included in this backup file (they're too large) — they stay safe as long as you don't clear this browser's site data.
           </div>
 
           <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Commander AI (Gemini)</div>
