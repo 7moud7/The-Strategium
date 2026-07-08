@@ -2023,8 +2023,10 @@ ONE sentence. Blunt. Commercial. Deeply principled.`,
   QI:{
     name:"Canis Rex — Sir Hektur",title:"The Chainbreaker · Freeblade Knight",
     img:IMG_BASE+"Canis%20Rex.webp",
-    imgPos:"center center", // this portrait is a square crop, not a tall bust shot —
-                            // "center top" (the default for the other commanders) cropped in too tight
+    // Square scene portrait, not a tall bust shot — the Knight's helm sits in
+    // the top ~20% of the frame, so "center top"/"center center" both crop
+    // past the actual face. Center vertically on the helm instead.
+    imgPos:"center 18%",
 
     personality:"Bold · Chivalric · Freedom-loving · Anti-tyranny heroism",
     voice:`You are Sir Hektur, pilot of Canis Rex the Chainbreaker, a legendary Freeblade Knight who fights for the freedom of the oppressed. You speak with the booming formal honour-codes of a Knight Preceptor with a fierce rebellious streak against all tyrants. Address the player as 'Scion'.
@@ -8222,7 +8224,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
     const description=batch.map(ev=>`${humanizeEvent(ev.eventType)}${ev.details?` (${ev.details})`:''}`).join('; ');
     // Instant placeholder — zero latency, no canned-line authoring needed
-    setCmdReaction({name:speaker.name,img:speaker.img,accent:speaker.accent||'var(--gold)',text:'…',player:speakerPlayer,thinking:true});
+    setCmdReaction({name:speaker.name,img:speaker.img,imgPos:speaker.imgPos,accent:speaker.accent||'var(--gold)',text:'…',player:speakerPlayer,thinking:true});
 
     try{
       // Map event types to character reaction context so Gemini matches the personality patterns
@@ -8541,7 +8543,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           }} onClick={()=>setCmdReaction(null)}>
             {cmdReaction.img&&(
               <img src={cmdReaction.img} alt={cmdReaction.name}
-                style={{width:36,height:36,objectFit:'cover',objectPosition:'center top',flexShrink:0,border:`1px solid ${cmdReaction.accent}`,opacity:.9}}
+                style={{width:36,height:36,objectFit:'cover',objectPosition:cmdReaction.imgPos||'center top',flexShrink:0,border:`1px solid ${cmdReaction.accent}`,opacity:.9}}
                 onError={e=>{e.target.style.display='none'}}/>
             )}
             <div style={{flex:1,minWidth:0}}>
