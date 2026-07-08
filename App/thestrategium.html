@@ -2194,6 +2194,19 @@ const WEAPON_KEYWORDS={
   'no cover':'Target cannot take Cover saves against attacks from this weapon.',
   'plasma warhead':'See Deathstrike datasheet for special rules.',
 };
+// Weapon keywords whose bonus depends on a single yes/no battlefield
+// condition — asking the question inline lets the roller apply the exact
+// modifier instead of leaving it as a static reminder tag.
+const KEYWORD_MOD_PROMPTS=[
+  {test:kw=>/rapid fire\s*(\d+)/i.test(kw), match:kw=>kw.match(/rapid fire\s*(\d+)/i),
+    question:'Is the target within half range?', effect:m=>({atk:parseInt(m[1])||0})},
+  {test:kw=>/melta\s*(\d+)/i.test(kw), match:kw=>kw.match(/melta\s*(\d+)/i),
+    question:'Is the target within half range?', effect:m=>({dmg:parseInt(m[1])||0})},
+  {test:kw=>/^heavy$/i.test(kw.trim()), match:kw=>[kw],
+    question:'Did this unit Remain Stationary this turn?', effect:()=>({hit:1})},
+  {test:kw=>/^lance$/i.test(kw.trim()), match:kw=>[kw],
+    question:'Did this unit make a Charge move this turn?', effect:()=>({wound:1})},
+];
 function phaseSort(items){
   return [...items].sort((a,b)=>{
     const pa=PHASE_ORDER.indexOf(a.phase||"");
@@ -6300,6 +6313,13 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
     ...fxMods.filter(m=>!m.targeted), // targeted mods (Oath etc.) never change weapon stats
   ]) : null;
 
+  // Keyword-driven auto-modifiers — e.g. Rapid Fire / Melta / Heavy / Lance
+  // ask a single yes/no question about the current battlefield situation and
+  // fold the answer straight into the roll, instead of leaving it as a tag
+  // the player has to remember to account for by hand.
+  const [kwAnswers, setKwAnswers] = React.useState({}); // {"weapon::keyword": true/false}
+  function kwAnswerKey(kw){ return `${selWeaponName}::${kw}`; }
+
   // Manual modifiers
   const [manualHitMod,  setManualHitMod]  = React.useState(0);
   const [manualDmgMod,  setManualDmgMod]  = React.useState(0);
@@ -6387,21 +6407,35 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   const stealthPenalty = (mode!=='melee'&&targetDefense?.stealth)?-1:0;
   const damagedPenalty = attackerDamaged?.minusHit?-1:0;
 
+  // Weapon keywords for the currently-selected weapon, with any that carry
+  // a yes/no conditional bonus (Rapid Fire, Melta, Heavy, Lance) resolved
+  // into a live modifier the instant the player answers the question.
+  const weaponKws = (weapon?.abilities||weapon?.keywords||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
+  const kwPrompts = weaponKws.map(kw=>{
+    const rule=KEYWORD_MOD_PROMPTS.find(r=>r.test(kw));
+    return rule?{kw,...rule}:null;
+  }).filter(Boolean);
+  const kwBonus = kwPrompts.reduce((acc,p)=>{
+    if(kwAnswers[kwAnswerKey(p.kw)]!==true) return acc;
+    const eff=p.effect(p.match(p.kw));
+    return {atk:acc.atk+(eff.atk||0), dmg:acc.dmg+(eff.dmg||0), hit:acc.hit+(eff.hit||0), wound:acc.wound+(eff.wound||0)};
+  },{atk:0,dmg:0,hit:0,wound:0});
+
   // Computed stats.
   // Core rules: net modifiers to a Hit or Wound roll are capped at +1/-1.
   const capMod = v=>Math.max(-1,Math.min(1,v));
-  const rawHitMod     = hitMod + manualHitMod + fxHitMod + stealthPenalty + damagedPenalty;
+  const rawHitMod     = hitMod + manualHitMod + fxHitMod + stealthPenalty + damagedPenalty + kwBonus.hit;
   const totalHitMod   = capMod(rawHitMod);
   const hitModCapped  = rawHitMod!==totalHitMod;
-  const rawWoundMod   = woundMod + fxWoundMod;
+  const rawWoundMod   = woundMod + fxWoundMod + kwBonus.wound;
   const totalWoundMod = capMod(rawWoundMod);
   const baseAtk  = parseInt(effectiveWeapon?.attacks)||0;
-  const totalAtk = baseAtk + manualAtkMod;
+  const totalAtk = baseAtk + manualAtkMod + kwBonus.atk;
   const strVal   = (parseInt(effectiveWeapon?.strength)||0) + manualStrMod;
   const baseAp   = parseInt(effectiveWeapon?.ap)||0;
   const totalAp  = baseAp + manualApMod;
   const baseDmg  = parseInt(effectiveWeapon?.damage)||1;
-  const totalDmg = baseDmg + manualDmgMod;
+  const totalDmg = baseDmg + manualDmgMod + kwBonus.dmg;
 
   const wsVal     = mode==='melee' ? (parseInt(unit.models?.[0]?.ws)||4) : (parseInt(unit.models?.[0]?.bs)||4);
   const hitTarget = Math.max(2, wsVal - totalHitMod);
@@ -6545,9 +6579,6 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   const killedModels = woundRolls.filter(w=>w.killed).length;
   const modelsAliveAfter = targetModelCount - (modelWounds||[]).filter(mw=>mw<=0).length;
   const unitDestroyedAfter = modelsAliveAfter<=0;
-
-  // Weapon keywords
-  const weaponKws = (weapon?.abilities||weapon?.keywords||'').split(/[,;]/).map(s=>s.trim()).filter(Boolean);
 
   const isShoot = mode==='shoot';
   const accentColor = isShoot ? 'var(--gold)' : '#c96';
@@ -6738,6 +6769,27 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
                   {weaponKws.map((kw,i)=>(
                     <WeaponKeywordTag key={i} kw={kw}/>
                   ))}
+                </div>
+              )}
+              {/* Conditional keyword prompts — answer once, modifier applies automatically */}
+              {kwPrompts.length>0&&(
+                <div style={{marginTop:6,display:'flex',flexDirection:'column',gap:4}}>
+                  {kwPrompts.map((p,i)=>{
+                    const ansKey=kwAnswerKey(p.kw);
+                    const ans=kwAnswers[ansKey];
+                    return(
+                      <div key={i} style={{display:'flex',alignItems:'center',gap:6,background:'var(--bg2)',border:`1px solid ${ans!=null?accentColor:'var(--border)'}`,padding:'4px 7px'}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:8,color:'var(--brass)',letterSpacing:.5,textTransform:'uppercase'}}>{p.kw}</div>
+                          <div style={{fontSize:9,color:'var(--text2)'}}>{p.question}</div>
+                        </div>
+                        <button onClick={()=>setKwAnswers(a=>({...a,[ansKey]:true}))}
+                          style={{fontSize:9,padding:'3px 8px',cursor:'pointer',background:ans===true?accentColor:'var(--bg1)',border:`1px solid ${accentColor}`,color:ans===true?'var(--bg0)':accentColor,fontWeight:ans===true?700:400}}>Yes</button>
+                        <button onClick={()=>setKwAnswers(a=>({...a,[ansKey]:false}))}
+                          style={{fontSize:9,padding:'3px 8px',cursor:'pointer',background:ans===false?'var(--border)':'var(--bg1)',border:'1px solid var(--border)',color:ans===false?'var(--text)':'var(--text3)',fontWeight:ans===false?700:400}}>No</button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {/* Modifier panel */}
