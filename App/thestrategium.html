@@ -6553,6 +6553,14 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   const accentColor = isShoot ? 'var(--gold)' : '#c96';
   const allWeaponsFired = isShoot && weapons.length > 0 && weapons.every(w=>firedWeapons.has(w.name));
 
+  // Dismissing via the backdrop or ✕ before anything was actually resolved
+  // (e.g. an accidental tap right after opening) must not count as a
+  // completed action — tell the parent so it can restore the unit to
+  // "not yet acted" rather than leaving it permanently stuck.
+  function handleDismiss(){
+    onClose(!(resolved||allWeaponsFired));
+  }
+
   function resolveAndClose(){
     if(!targetEntry || !modelWounds) return;
     // Compute new unit total wounds
@@ -6590,7 +6598,7 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   }
 
   return(
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleDismiss}>
       <div className="modal anim-slide-up" style={{maxWidth:460,maxHeight:'92vh',display:'flex',flexDirection:'column',borderTop:`3px solid ${accentColor}`}}
         onClick={e=>e.stopPropagation()}>
 
@@ -6616,7 +6624,7 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
               </div>
             )}
           </div>
-          <button className="btn btn-ghost btn-xs" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-xs" onClick={handleDismiss}>✕</button>
         </div>
 
         <div style={{flex:1,overflowY:'auto',padding:'10px 14px'}}>
@@ -9323,7 +9331,16 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                               <div style={{fontSize:9,color:'var(--greenBright)',flex:1}}>
                                 ✓ {chosenAction?chosenAction.replace(/_/g,' ').toUpperCase():'ACTIVATED'}
                               </div>
-                              <button onClick={()=>{setActivated(ac=>({...ac,[entry.id]:false}));setUnitAction(ua=>{const n={...ua};delete n[entry.id];return n;});}}
+                              <button onClick={()=>{
+                                setActivated(ac=>({...ac,[entry.id]:false}));
+                                setUnitAction(ua=>{const n={...ua};delete n[entry.id];return n;});
+                                // Fight is the only phase action gated by a second,
+                                // separate flag (fightActivated) — undoing the choice
+                                // must also clear it, or the unit stays stuck as
+                                // "Already Fought" forever (e.g. after accidentally
+                                // dismissing the Fight roller before it resolved).
+                                if(chosenAction==='fight') setFightActivated(fa=>{const n={...fa};delete n[entry.id];return n;});
+                              }}
                                 style={{fontSize:8,padding:'2px 6px',background:'none',border:'1px solid var(--border)',color:'var(--text3)',cursor:'pointer',letterSpacing:.5}}>
                                 Undo
                               </button>
@@ -9773,11 +9790,20 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             myCP:cp[`p${activePlayer}`]||0,
             missions:missionCards.filter(c=>c.status==='active').map(c=>c.name).join(', '),
           }}
-          onClose={()=>{
+          onClose={(cancelled)=>{
             setFightUnit(null);
+            // Dismissed (backdrop/✕) before any attack was actually resolved —
+            // don't leave the unit permanently stuck as "Already Fought";
+            // restore it to its pre-Fight state so it can be fought again.
+            if(cancelled){
+              const fid=fightUnit.id;
+              setFightActivated(fa=>{const n={...fa};delete n[fid];return n;});
+              setActivated(ac=>{const n={...ac};delete n[fid];return n;});
+              setUnitAction(ua=>{const n={...ua};delete n[fid];return n;});
+            }
             // After fight resolves, remind about eligible fight-backs
             const enemyInER=(inactiveArmy?.units||[]).filter(e=>!destroyed[e.id]&&engaged[e.id]&&!fightActivated[e.id]);
-            if(enemyInER.length>0&&phase===4){
+            if(!cancelled&&enemyInER.length>0&&phase===4){
               triggerReaction('melee_resolved',`${enemyInER.length} enemy unit(s) eligible to fight back`);
             }
           }}
