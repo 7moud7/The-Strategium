@@ -4277,7 +4277,7 @@ const ROSTER_GROUP_ORDER = [
   'Vehicle','Walker','Dedicated Transports','Fortifications','Allied Units','Other'
 ];
 
-function RosterGroups({armyGrouped,active,removeUnit,setWarlord,saveWargear,expandTarget}){
+function RosterGroups({armyGrouped,active,removeUnit,setWarlord,saveWargear,renameEntry,expandTarget}){
   // All groups start collapsed
   const [open,setOpen]=React.useState({});
   // Auto-expand the group containing the expandTarget unit (jump-to-fix)
@@ -4341,6 +4341,7 @@ function RosterGroups({armyGrouped,active,removeUnit,setWarlord,saveWargear,expa
                   <ArmyUnitRow key={e.id} entry={e} onRemove={removeUnit}
                     onWarlord={setWarlord} isWarlord={active.warlordId===e.id}
                     allEntries={active.units} onSaveWargear={saveWargear}
+                    onRename={renameEntry}
                     forceOpen={expandTarget?.entryId===e.id}
                     jumpToWargear={expandTarget?.entryId===e.id&&expandTarget?.field==='wargear'}/>
                 ))}
@@ -4355,10 +4356,12 @@ function RosterGroups({armyGrouped,active,removeUnit,setWarlord,saveWargear,expa
 
 
 // ── ARMY UNIT ROW ─────────────────────────────────────────────────────────────
-function ArmyUnitRow({entry,onRemove,onWarlord,isWarlord,allEntries,onSaveWargear,forceOpen,jumpToWargear}){
+function ArmyUnitRow({entry,onRemove,onWarlord,isWarlord,allEntries,onSaveWargear,onRename,forceOpen,jumpToWargear}){
   const [intelAbility,setIntelAbility]=useState(null);
   const [exp,setExp]=useState(false);
   const [rosterTab,setRosterTab]=useState('stats'); // stats | wargear
+  const [editingName,setEditingName]=useState(false);
+  const [nameDraft,setNameDraft]=useState(entry.nickname||'');
   React.useEffect(()=>{
     if(forceOpen){
       setExp(true);
@@ -4403,12 +4406,27 @@ function ArmyUnitRow({entry,onRemove,onWarlord,isWarlord,allEntries,onSaveWargea
   const canBeWarlord=canBeWarlordRule(u);
   const mustBeWarlordUnit=mustBeWarlord(u);
 
+  const displayName=entryDisplayName(entry,allEntries);
+
   return(
     <div className={`unit-card ${isWarlord?'warlord':''} ${leaderEntry?'attached':''}`}>
-      <div className="unit-card-header" onClick={()=>setExp(o=>!o)}>
+      <div className="unit-card-header" onClick={()=>{if(!editingName)setExp(o=>!o);}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-            <span className="unit-name">{u.name}</span>
+            {editingName?(
+              <div onClick={e=>e.stopPropagation()} style={{display:'flex',alignItems:'center',gap:4}}>
+                <input autoFocus value={nameDraft} placeholder={u.name}
+                  onChange={e=>setNameDraft(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'){onRename?.(entry.id,nameDraft);setEditingName(false);}if(e.key==='Escape')setEditingName(false);}}
+                  style={{fontSize:11,padding:'2px 6px',width:140}}/>
+                <button className="btn btn-xs btn-gold" onClick={()=>{onRename?.(entry.id,nameDraft);setEditingName(false);}}>✓</button>
+                <button className="btn btn-xs btn-ghost" onClick={()=>setEditingName(false)}>✕</button>
+              </div>
+            ):(
+              <span className="unit-name" onClick={e=>{e.stopPropagation();setNameDraft(entry.nickname||'');setEditingName(true);}} title="Click to rename">
+                {displayName} <span style={{fontSize:9,opacity:.4}}>✎</span>
+              </span>
+            )}
             {isWarlord&&<span style={{color:'var(--gold)',fontSize:9,fontWeight:800,letterSpacing:2,fontFamily:"'Cinzel',serif",border:"1px solid var(--gold)",padding:"2px 6px"}}>WARLORD</span>}
           </div>
           <div style={{marginTop:4,display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
@@ -6101,6 +6119,21 @@ function getWeaponCarriers(entry){
 function stripHTML(str){
   if(!str) return '';
   return String(str).replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim();
+}
+
+// Distinguishing label for a roster entry — an army can easily have 2-3
+// copies of the same datasheet (three Boyz units, etc.), which are
+// otherwise indistinguishable in the Armoury and on the battlefield. A saved
+// nickname always wins; otherwise auto-number by this entry's position
+// among same-name entries in the SAME army (stable order, so it doesn't
+// reshuffle as other units are added/removed).
+function entryDisplayName(entry,siblingEntries){
+  const name=stripHTML(entry?.unit?.name||'');
+  if(entry?.nickname) return entry.nickname;
+  const sameName=(siblingEntries||[]).filter(e=>stripHTML(e.unit?.name)===name);
+  if(sameName.length<=1) return name;
+  const idx=sameName.findIndex(e=>e.id===entry.id)+1;
+  return `${name} #${idx}`;
 }
 
 // ── LEADER ABILITY ENGINE ───────────────────────────────────────────────────
@@ -9181,8 +9214,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                             color:isDestroyed?'var(--text3)':isActivated?'var(--greenBright)':'var(--text)',
                             textDecoration:isDestroyed?'line-through':'underline dotted rgba(200,168,75,.4)',
                             marginBottom:1,cursor:'pointer'}}
-                            onClick={()=>setUnitDetailModal({...entry,_armyFactionId:army.factionId})}
-                            title="Tap to view stats, weapons & abilities">{stripHTML(u.name)}</div>
+                            onClick={()=>setUnitDetailModal({...entry,_armyFactionId:army.factionId,_siblings:army.units})}
+                            title="Tap to view stats, weapons & abilities">{entryDisplayName(entry,army.units)}</div>
                           {/* Model count from sizeIdx */}
                           {(()=>{
                             const sIdx=entry.sizeIdx||0;
@@ -9793,7 +9826,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                   onError={e=>{e.target.style.display='none';}}/>
               );})()}
               <div style={{flex:1,minWidth:0}}>
-                <div className="modal-title" style={{marginBottom:2}}>{stripHTML(unitDetailModal.unit.name)}</div>
+                <div className="modal-title" style={{marginBottom:2}}>{entryDisplayName(unitDetailModal,unitDetailModal._siblings)}</div>
                 <span onClick={()=>setBattleModalPickerOpen(true)} style={{fontSize:8,padding:'1px 6px',border:'1px solid var(--border)',color:'var(--text3)',cursor:'pointer',letterSpacing:.5}}>
                   📷 {(battleModalPhoto||unitImageURL(unitDetailModal._armyFactionId,unitDetailModal.unit.id))?'change photo':'assign photo'}
                 </span>
@@ -10306,6 +10339,17 @@ function App(){
     });
   }
 
+  // A custom nickname for this specific entry — needed once an army has
+  // multiple copies of the same unit (e.g. three Boyz units) so they can be
+  // told apart on the roster and battlefield. Empty clears back to the
+  // auto-numbered default ("Boyz #2").
+  function renameEntry(entryId,nickname){
+    if(!active) return;
+    upArmy(active.id,{
+      units:active.units.map(e=>e.id===entryId?{...e,nickname:nickname?.trim()||null}:e)
+    });
+  }
+
 
   function setWarlord(eid){
     if(!active) return;
@@ -10350,7 +10394,7 @@ function App(){
       const choosable=groups.filter(g=>!g.fixed);
       return choosable.length>0&&!e.wargear;
     });
-    noWargear.forEach(e=>warnings.push({type:'warn',msg:`${e.unit.name}: Wargear not configured`,entryId:e.id,field:'wargear'}));
+    noWargear.forEach(e=>warnings.push({type:'warn',msg:`${entryDisplayName(e,active.units)}: Wargear not configured`,entryId:e.id,field:'wargear'}));
     // 3. Over points limit
     if(active.pointsLimit&&totalPts>active.pointsLimit) warnings.push({type:'error',msg:`Over points limit: ${totalPts}/${active.pointsLimit}pts`});
     // 4. No units
@@ -11104,6 +11148,7 @@ function App(){
             {active.units.length>0&&(
               <RosterGroups armyGrouped={armyGrouped} active={active}
                 removeUnit={removeUnit} setWarlord={setWarlord} saveWargear={saveWargear}
+                renameEntry={renameEntry}
                 expandTarget={expandTarget}/>
             )}
           </div>
