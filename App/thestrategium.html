@@ -2639,6 +2639,23 @@ function ReferenceArchiveScreen({coreStrats,onBack}){
   const [openPhase,setOpenPhase]=React.useState('command');
   React.useEffect(()=>{ fetchRepoJSON('WH40K/Rules/core-rules.json').then(setCore); },[]);
 
+  // ── Army Rules & Units/Detachments — faction index, loaded once ──
+  const [factionIndex,setFactionIndex]=React.useState(null);
+  React.useEffect(()=>{ fetchRepoJSON('WH40K/Data/Unit Data/index.json').then(setFactionIndex); },[]);
+  const [openArmyRule,setOpenArmyRule]=React.useState(null); // faction id expanded
+
+  const [browseFid,setBrowseFid]=React.useState(null);
+  const [browseFdata,setBrowseFdata]=React.useState(null);
+  const [browseLoading,setBrowseLoading]=React.useState(false);
+  const [browseSearch,setBrowseSearch]=React.useState('');
+  const [browseUnit,setBrowseUnit]=React.useState(null);
+  const [openDet,setOpenDet]=React.useState(null);
+  function openFactionBrowse(fid){
+    setBrowseFid(fid); setBrowseFdata(null); setBrowseSearch(''); setOpenDet(null);
+    setBrowseLoading(true);
+    fetchRepoJSON('WH40K/Data/Unit Data/'+factionIndex[fid].file).then(d=>{ setBrowseFdata(d); setBrowseLoading(false); });
+  }
+
   const PHASE_TABS=[
     ['command','Command'],['movement','Movement'],['shooting','Shooting'],
     ['charge','Charge'],['fight','Fight'],
@@ -2651,7 +2668,7 @@ function ReferenceArchiveScreen({coreStrats,onBack}){
       <div/>
     </div>
     <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0,overflowX:'auto'}}>
-      {[['rules','Core Rules'],['keywords','Weapon Keywords'],['strats','Stratagems'],['defs','Definitions']].map(([k,l])=>(
+      {[['rules','Core Rules'],['army','Army Rules'],['units','Units & Detachments'],['keywords','Weapon Keywords'],['strats','Stratagems'],['defs','Definitions']].map(([k,l])=>(
         <div key={k} className={`tab ${tab===k?'active':''}`} onClick={()=>setTab(k)} style={{whiteSpace:'nowrap'}}>{l}</div>
       ))}
     </div>
@@ -2691,6 +2708,125 @@ function ReferenceArchiveScreen({coreStrats,onBack}){
           ))}
         </div>
       ))}
+
+      {tab==='army'&&(
+          <div>
+            <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginBottom:10}}>
+              Every army's overarching faction rule — the one that applies to the whole force, distinct from any single detachment's rule (see Units &amp; Detachments for those).
+            </div>
+            {Object.entries(ARMY_ABILITIES)
+              .sort((a,b)=>(factionIndex?.[a[0]]?.name||a[0]).localeCompare(factionIndex?.[b[0]]?.name||b[0]))
+              .map(([fid,rule])=>{
+                const open=openArmyRule===fid;
+                return(
+                  <div key={fid} style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',marginBottom:6}}>
+                    <div style={{padding:'9px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                      onClick={()=>setOpenArmyRule(open?null:fid)}>
+                      <div>
+                        <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,textTransform:'uppercase'}}>{factionIndex?.[fid]?.name||fid}</div>
+                        <div style={{fontFamily:"'Cinzel',serif",fontSize:12,color:'var(--gold)',marginTop:2}}>{rule.name}</div>
+                      </div>
+                      <span style={{fontSize:10,color:'var(--text3)'}}>{open?'▲':'▼'}</span>
+                    </div>
+                    {open&&(
+                      <div style={{padding:'0 12px 12px'}}>
+                        <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.6}}>{rule.summary}</div>
+                        {(rule.options||[]).length>0&&(
+                          <div style={{marginTop:8}}>
+                            {rule.options.map((o,i)=>(
+                              <div key={i} style={{background:'var(--bg2)',border:'1px solid var(--border)',padding:'6px 9px',marginTop:4}}>
+                                <div style={{fontSize:10,color:'var(--gold)',fontFamily:"'Cinzel',serif"}}>{o.name}</div>
+                                <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginTop:2}}>{o.summary}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+      )}
+
+      {tab==='units'&&(
+        !factionIndex?(
+          <div className="loading"><div className="spinner"/></div>
+        ):!browseFid?(
+          <div>
+            <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginBottom:10}}>
+              Pick a faction to browse its detachments (rule, stratagems, enhancements) and every unit datasheet.
+            </div>
+            {Object.entries(factionIndex).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([fid,meta])=>(
+              <div key={fid} onClick={()=>openFactionBrowse(fid)}
+                style={{background:'var(--bg1)',border:'1px solid var(--border)',padding:'9px 12px',marginBottom:5,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{fontFamily:"'Cinzel',serif",fontSize:12,color:'var(--gold)'}}>{meta.name}</div>
+                <div style={{fontSize:9,color:'var(--text3)'}}>{meta.units} units · {meta.detachments} detachments</div>
+              </div>
+            ))}
+          </div>
+        ):(
+          <div>
+            <button className="btn btn-outline btn-sm" style={{marginBottom:10}} onClick={()=>{setBrowseFid(null);setBrowseFdata(null);}}>← All Factions</button>
+            {browseLoading||!browseFdata?(
+              <div className="loading"><div className="spinner"/></div>
+            ):(<>
+              <div className="section-label" style={{marginTop:0}}>Detachments</div>
+              {(browseFdata.detachments||[]).map(det=>{
+                const open=openDet===det.id;
+                return(
+                  <div key={det.id} style={{background:'var(--bg1)',border:'1px solid var(--border)',marginBottom:5}}>
+                    <div style={{padding:'9px 12px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                      onClick={()=>setOpenDet(open?null:det.id)}>
+                      <div>
+                        <div style={{fontFamily:"'Cinzel',serif",fontSize:12,color:'var(--gold)'}}>{det.name}</div>
+                        <div style={{fontSize:9,color:'var(--text3)',marginTop:2}}>{(det.stratagems||[]).length} Stratagems · {(det.enhancements||[]).length} Enhancements</div>
+                      </div>
+                      <span style={{fontSize:10,color:'var(--text3)'}}>{open?'▲':'▼'}</span>
+                    </div>
+                    {open&&(
+                      <div style={{padding:'0 12px 12px'}}>
+                        {det.legend&&<div style={{fontSize:10,color:'var(--text3)',fontStyle:'italic',lineHeight:1.5,marginBottom:8}}>{clean(det.legend)}</div>}
+                        {(det.abilities||[]).map((a,i)=>(
+                          <div key={i} style={{marginBottom:6}}>
+                            <div style={{fontSize:10,color:'var(--gold)',fontFamily:"'Cinzel',serif"}}>{a.name}</div>
+                            <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.6}} dangerouslySetInnerHTML={{__html:a.description||''}}/>
+                          </div>
+                        ))}
+                        {(det.enhancements||[]).length>0&&(<>
+                          <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,textTransform:'uppercase',margin:'8px 0 3px'}}>Enhancements</div>
+                          {det.enhancements.map((e,i)=>(
+                            <div key={i} style={{fontSize:10,color:'var(--text2)',lineHeight:1.5,marginBottom:3}}>
+                              <strong style={{color:'var(--text)'}}>{e.name}</strong> ({e.cost||e.cp}pts) — {clean(e.description||e.legend||'')}
+                            </div>
+                          ))}
+                        </>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {(browseFdata.detachments||[]).length===0&&<div style={{fontSize:10,color:'var(--text3)',marginBottom:10}}>No detachments in this dataset.</div>}
+
+              <div className="section-label">Units ({browseFdata.units?.length||0})</div>
+              <input placeholder="Search units…" value={browseSearch} onChange={e=>setBrowseSearch(e.target.value)} style={{width:'100%',marginBottom:8,fontSize:12}}/>
+              {(browseFdata.units||[])
+                .filter(u=>!browseSearch||u.name.toLowerCase().includes(browseSearch.toLowerCase()))
+                .map(u=>(
+                  <div key={u.id} onClick={()=>setBrowseUnit(u)}
+                    style={{background:'var(--bg1)',border:'1px solid var(--border)',padding:'7px 12px',marginBottom:3,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <span style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--text)'}}>{u.name}</span>
+                    <span style={{fontSize:9,color:'var(--text3)'}}>{u.role}</span>
+                  </div>
+                ))}
+            </>)}
+            {browseUnit&&(
+              <UnitDetailModal unit={browseUnit} factionId={browseFid} fdata={browseFdata}
+                onClose={()=>setBrowseUnit(null)} readOnly/>
+            )}
+          </div>
+        )
+      )}
 
       {tab==='keywords'&&(
         <div>
@@ -3484,7 +3620,7 @@ function StratCardCP({s,cost,canAfford,onUse}){
 }
 
 // ── UNIT DETAIL MODAL ─────────────────────────────────────────────────────────
-function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
+function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits,readOnly}){
   const [si,setSi]=React.useState(0);
   const [kwTip,setKwTip]=React.useState(null);
   if(!unit) return null;
@@ -3922,17 +4058,20 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
 
         </div>
 
-        {/* Footer */}
-        <div style={{padding:'10px 16px',borderTop:'1px solid var(--border)',flexShrink:0}}>
-          {blocked?(
-            <div className="error-box">Epic Heroes can only be included once per army</div>
-          ):(
-            <button className="btn btn-gold" style={{width:'100%',padding:'13px',fontSize:13}}
-              onClick={()=>onAdd(unit,si)}>
-              Add to Army — {cost}pts
-            </button>
-          )}
-        </div>
+        {/* Footer — omitted in read-only (reference/browse) contexts, where
+            there's no army to add this datasheet to. */}
+        {!readOnly&&(
+          <div style={{padding:'10px 16px',borderTop:'1px solid var(--border)',flexShrink:0}}>
+            {blocked?(
+              <div className="error-box">Epic Heroes can only be included once per army</div>
+            ):(
+              <button className="btn btn-gold" style={{width:'100%',padding:'13px',fontSize:13}}
+                onClick={()=>onAdd(unit,si)}>
+                Add to Army — {cost}pts
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
