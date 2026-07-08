@@ -8149,6 +8149,11 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   const [activeArmyAbilities,setActiveArmyAbilities]=useState({}); // {abilityName: {player, expiresRound, modifiers}} // {entryId: true} — already fought this phase
   const [fallbackUnits,setFallbackUnits]=useState({}); // {entryId: round fallen back}
   const [perModelWounds,setPerModelWounds]=useState({}); // {entryId: {modelIdx: woundsLeft}}
+  // Wound/destroy resolution now happens automatically as part of resolving
+  // an attack in the Combat Roller — these manual controls are collapsed by
+  // default and only need opening for the rare case the auto-resolution
+  // doesn't cover (terrain damage, a mission rule, a correction, etc).
+  const [manualOverrideOpen,setManualOverrideOpen]=useState({}); // {entryId: bool}
   const cmdReactionTimer=React.useRef(null);
   // logAction — call this whenever a meaningful game event occurs
   const actionLogRef=React.useRef([]);
@@ -9521,8 +9526,18 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                               return '';
                             }
 
+                            const overrideOpen=!!manualOverrideOpen[entry.id];
                             return(
                               <div style={{padding:'4px 10px 8px'}}>
+                                {/* Wound/destroy resolution happens automatically when an attack
+                                    is resolved in the Combat Roller — these controls are for the
+                                    rare case that needs a manual correction (terrain, a mission
+                                    rule, an undo), so they stay tucked away until asked for. */}
+                                <button className="btn btn-xs btn-ghost" style={{width:'100%',marginBottom:overrideOpen?6:0,fontSize:8,letterSpacing:1}}
+                                  onClick={()=>setManualOverrideOpen(m=>({...m,[entry.id]:!overrideOpen}))}>
+                                  {overrideOpen?'▲ Hide Manual Override':'⚙ Manual Override'}
+                                </button>
+                                {overrideOpen&&(<>
                                 {isMultiModel&&(
                                   <div style={{marginBottom:6}}>
                                     <div style={{fontSize:8,letterSpacing:1.5,color:'var(--text3)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:4}}>
@@ -9600,8 +9615,15 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                       onClick={()=>setWounds(w=>({...w,[entry.id]:maxW}))}>Full</button>
                                   </div>
                                 )}
-                                <div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap'}}>
-                                  {phase===4&&(
+                                {!isDestroyed&&(
+                                  <button className="btn btn-xs btn-danger" style={{width:'100%',marginTop:4}}
+                                    onClick={()=>{playSFX('destroy'); setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','',0,()=>setDestroyed(d=>({...d,[entry.id]:false})));}}>
+                                    Mark Destroyed
+                                  </button>
+                                )}
+                                </>)}
+                                {phase===4&&(
+                                  <div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap'}}>
                                     <button className="btn btn-sm btn-outline" style={{flex:1}}
                                       onClick={()=>{
                                         const next=!isEngaged;
@@ -9610,23 +9632,11 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                       }}>
                                       {isEngaged?'Not in Combat':'In Combat'}
                                     </button>
-                                  )}
-                                  {!isDestroyed&&aliveModels===undefined&&(
-                                    <button className="btn btn-xs btn-danger" style={{flex:1}}
-                                      onClick={()=>{playSFX('destroy'); setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','',0,()=>setDestroyed(d=>({...d,[entry.id]:false})));}}>
-                                      Destroyed
-                                    </button>
-                                  )}
-                                </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
-                          {!isDestroyed&&(
-                            <button className="btn btn-xs btn-danger" style={{margin:'0 10px 8px',display:'block',width:'calc(100% - 20px)'}}
-                              onClick={()=>{playSFX('destroy'); setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','',0,()=>setDestroyed(d=>({...d,[entry.id]:false})));}}>
-                              Mark Destroyed
-                            </button>
-                          )}
                         </>
                       )}
                       {isDestroyed&&(
