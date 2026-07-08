@@ -9070,7 +9070,12 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
                   // Context-aware actions for this unit based on phase + unit state
                   const unitPhaseActions=(()=>{
-                    if(!isActive) return [];
+                    // Fight phase is the one exception to "only the active player's
+                    // units get actions" — an inactive-army unit that's engaged (or
+                    // charged) gets its own Fight action so it can strike back in
+                    // the same combat, per the alternating-activations rule. Every
+                    // other phase stays active-player-only.
+                    if(!isActive&&!(phase===4&&canActInFightPhase)) return [];
                     const kws=(u.keywords||[]).map(k=>k.toLowerCase());
                     const abilities=(u.abilities||[]).map(a=>(a.name||'').toLowerCase());
                     const hasAdvanced=unitAction[entry.id]==='advance';
@@ -9737,12 +9742,21 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       })}
 
       {/* Melee — CombatRoller */}
-      {fightUnit&&(
+      {fightUnit&&(()=>{
+        // Fight-back: the unit taking this Fight action might belong to the
+        // INACTIVE player (their engaged unit striking back mid the active
+        // player's turn) — attribute army/enemyArmy/commander to whichever
+        // side actually owns it, not always the active player.
+        const fightUnitIsActive=(activeArmy?.units||[]).some(e=>e.id===fightUnit.id);
+        const fightingArmy=fightUnitIsActive?activeArmy:inactiveArmy;
+        const opposingArmy=fightUnitIsActive?inactiveArmy:activeArmy;
+        const fightingPlayer=fightUnitIsActive?activePlayer:(activePlayer===1?2:1);
+        return (
         <CombatRoller
           mode="melee"
           entry={fightUnit}
-          army={activeArmy}
-          enemyArmy={inactiveArmy}
+          army={fightingArmy}
+          enemyArmy={opposingArmy}
           wounds={wounds}
           destroyed={destroyed}
           applyWounds={setWounds}
@@ -9750,8 +9764,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           setEngaged={setEngaged}
           chargedUnits={chargedUnits}
           activeEffects={activeEffects}
-          attackerPlayer={activePlayer}
-          commander={resolveCommander(activeArmy)}
+          attackerPlayer={fightingPlayer}
+          commander={resolveCommander(fightingArmy)}
           counselContext={{
             round, phaseName:PHASES[phase],
             myVP:activePlayer===1?p1Total:p2Total,
@@ -9770,7 +9784,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           onLog={logAction}
           triggerReaction={triggerReaction}
         />
-      )}
+        );
+      })()}
 
       {/* Ability Intelligence Panel */}
       {abilityIntel&&<AbilityIntelPanel ability={abilityIntel} phase={PHASES[phase]} onClose={()=>setAbilityIntel(null)}/>}
