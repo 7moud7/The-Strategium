@@ -11403,6 +11403,9 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
     const [buildList,setBuildList]   = useState([]);
     const [collFactionData,setCollFactionData] = useState(null);
     const [collFactionLoading,setCollFactionLoading] = useState(false);
+    // Which armies are collapsed in the Owned tab — keeps a big collection
+    // from turning into a wall of units. Expanded by default.
+    const [collapsedFactions,setCollapsedFactions] = useState({});
 
     // ── Box-set helpers ──────────────────────────────────────────────────────
     // Models per box, in priority order:
@@ -11719,13 +11722,21 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                     </div>
                   )}
 
-                  {Object.entries(byFaction).map(([fid,{name:fname,units}])=>(
+                  {Object.entries(byFaction).map(([fid,{name:fname,units}])=>{
+                    const collapsed=!!collapsedFactions[fid];
+                    const nPaintedFaction=units.reduce((s,u)=>s+Object.values(u.modelStatus||{}).filter(st=>st==='painted').length,0);
+                    const nModelsFaction=units.reduce((s,u)=>s+(u.modelNames?.length||0),0);
+                    return(
                     <div key={fid} style={{marginBottom:14}}>
-                      <div style={{fontSize:9,letterSpacing:2,color:'var(--brass)',fontFamily:"'Cinzel',serif",
+                      <div onClick={()=>setCollapsedFactions(c=>({...c,[fid]:!collapsed}))}
+                        style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',
+                        fontSize:9,letterSpacing:2,color:'var(--brass)',fontFamily:"'Cinzel',serif",
                         textTransform:'uppercase',marginBottom:6,paddingBottom:4,borderBottom:'1px solid var(--goldborder)'}}>
-                        {fname}
+                        <span style={{fontSize:10,transition:'transform .15s',display:'inline-block',transform:collapsed?'rotate(-90deg)':'none'}}>▾</span>
+                        <span style={{flex:1}}>{fname}</span>
+                        <span style={{color:'var(--text3)',letterSpacing:.5}}>{units.length} unit{units.length!==1?'s':''} · {nPaintedFaction}/{nModelsFaction} painted</span>
                       </div>
-                      {units.map(unit=>{
+                      {!collapsed&&units.map(unit=>{
                         const slots = unit.modelNames || [];
                         const nModels = slots.length;
                         const statuses = unit.modelStatus || {};
@@ -11843,7 +11854,7 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                         );
                       })}
                     </div>
-                  ))}
+                  );})}
                 </>
               ) : addFaction==='select' ? (
                 /* Faction picker */
