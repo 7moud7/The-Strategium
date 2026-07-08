@@ -3708,6 +3708,9 @@ function UnitDetailModal({unit,factionId,fdata,onClose,onAdd,existingUnits}){
               {/* ── Your own photo of this exact model ── */}
               <div style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',padding:10,marginBottom:10}}>
                 <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:6}}>Your Own Photo</div>
+                <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginBottom:8}}>
+                  Saving a photo here replaces the stock photo for this unit everywhere it appears — Collection, Battlefield, everywhere. Remove it to go back to the stock photo.
+                </div>
                 <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPickFile}/>
                 {!capturePreview?(
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -9948,6 +9951,9 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                 <input ref={battleModalFileRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={battleOnPickFile}/>
                 <div style={{background:'var(--bg1)',border:'1px solid var(--goldborder)',padding:10}}>
                   <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:6}}>Your Own Photo</div>
+                  <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginBottom:8}}>
+                    Saving a photo here replaces the stock photo for this unit everywhere it appears — Collection, Battlefield, everywhere. Remove it to go back to the stock photo.
+                  </div>
                   {!battleModalCapture?(
                     <div style={{display:'flex',gap:8,alignItems:'center'}}>
                       {battleModalPhoto&&(
