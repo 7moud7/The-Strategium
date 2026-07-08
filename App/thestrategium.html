@@ -6479,6 +6479,12 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   // Roll inputs — per wound-roll entry with model assignment
   const [numAtk,     setNumAtk]     = React.useState('');
   const [hits,       setHits]       = React.useState('');
+  // Wound rolls and the opponent's saves are tracked as their own explicit
+  // steps (counts), rather than folding "did it get through" straight into
+  // the per-model assignment click — matching the actual sequence of a real
+  // attack: hit, wound, THEN the opponent saves, THEN damage is assigned.
+  const [woundSuccesses, setWoundSuccesses] = React.useState('');
+  const [failedSaves,    setFailedSaves]    = React.useState('');
   const [woundRolls, setWoundRolls] = React.useState([]); // [{modelIdx, damage}]
   const [resolved,   setResolved]   = React.useState(false);
 
@@ -6692,11 +6698,14 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
     }
     setModelWounds(mw);
     setWoundRolls([]);
+    setWoundSuccesses(''); setFailedSaves('');
   },[targetId]);
 
   // Add a wound result (successful wound roll = damage totalDmg to a model)
   function addWound(modelIdx){
     if(modelWounds===null) return;
+    // Can't assign more damage than the opponent actually failed saves for
+    if(woundRolls.length>=(parseInt(failedSaves)||0)) return;
     const newMW = [...modelWounds];
     let dmgLeft = totalDmg;
     let idx = modelIdx;
@@ -6764,7 +6773,7 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
       // Mark this weapon as fired
       setFiredWeapons(s=>new Set([...s, weapon.name]));
       setWoundRolls([]);
-      setNumAtk(''); setHits('');
+      setNumAtk(''); setHits(''); setWoundSuccesses(''); setFailedSaves('');
       // If all weapons fired, close; else stay open for next weapon
       const remaining = weapons.filter(w=>!firedWeapons.has(w.name)&&w.name!==weapon.name);
       if(remaining.length===0){ setTimeout(()=>onClose(),350); }
@@ -7078,10 +7087,43 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
                 </div>
               </div>
 
-              {/* Step 3 — Wound rolls with per-model assignment */}
+              {/* Step 3 — Wound rolls */}
+              <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,fontFamily:"'Cinzel',serif",color:'var(--text)'}}>3. Wounds (on {effectiveWoundTarget||'?'}+)</div>
+                    <div style={{fontSize:9,color:'var(--text3)'}}>How many hits wounded?</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                    <button className="counter-btn" onClick={()=>setWoundSuccesses(v=>String(Math.max(0,(parseInt(v)||0)-1)))} style={{width:26,height:26}}>−</button>
+                    <input type="number" min="0" value={woundSuccesses} onChange={e=>setWoundSuccesses(e.target.value)}
+                      style={{width:44,textAlign:'center',fontSize:14,fontWeight:700,padding:'3px',border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--text)'}}/>
+                    <button className="counter-btn" onClick={()=>setWoundSuccesses(v=>String((parseInt(v)||0)+1))} style={{width:26,height:26}}>+</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4 — Opponent's saves */}
+              <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,fontFamily:"'Cinzel',serif",color:'var(--text)'}}>4. Opponent's Saves ({bestSave?bestSave+'+':'no save'})</div>
+                    <div style={{fontSize:9,color:'var(--text3)'}}>Of those {woundSuccesses||0} wounds, how many did they FAIL to save?</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                    <button className="counter-btn" onClick={()=>setFailedSaves(v=>String(Math.max(0,(parseInt(v)||0)-1)))} style={{width:26,height:26}}>−</button>
+                    <input type="number" min="0" max={parseInt(woundSuccesses)||0} value={failedSaves}
+                      onChange={e=>setFailedSaves(String(Math.min(parseInt(e.target.value)||0,parseInt(woundSuccesses)||0)))}
+                      style={{width:44,textAlign:'center',fontSize:14,fontWeight:700,padding:'3px',border:'1px solid var(--border)',background:'var(--bg2)',color:'var(--text)'}}/>
+                    <button className="counter-btn" onClick={()=>setFailedSaves(v=>String(Math.min((parseInt(v)||0)+1,parseInt(woundSuccesses)||0)))} style={{width:26,height:26}}>+</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 5 — assign the resulting damage to models */}
               <div style={{padding:'8px 10px'}}>
                 <div style={{fontSize:10,fontFamily:"'Cinzel',serif",color:'var(--text)',marginBottom:6}}>
-                  3. Wounds (on {effectiveWoundTarget||'?'}+) — assign each wound to a model
+                  5. Damage — assign each failed save to a model ({totalWoundResults}/{parseInt(failedSaves)||0})
                 </div>
                 {/* Model grid for target */}
                 {modelWounds&&(
