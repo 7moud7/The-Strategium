@@ -444,6 +444,19 @@ input::placeholder{color:var(--text3)}
 }
 .btn-home:hover{background:var(--golddim);border-color:var(--gold);transform:scale(1.06);}
 .btn-home:active{transform:scale(.92);}
+/* Floating settings-cog — summonable from any screen, including the ones
+   (war-hub/commander/game-setup/battle) that don't otherwise reach the
+   shared Settings & Backup modal. Sits opposite the home button. */
+.btn-settings-float{
+  position:fixed;top:10px;right:10px;z-index:150;
+  width:34px;height:34px;flex-shrink:0;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;line-height:1;color:var(--gold);
+  background:var(--bg2);border:1px solid var(--goldborder);border-radius:50%;
+  transition:all .15s;
+}
+.btn-settings-float:hover{background:var(--golddim);border-color:var(--gold);transform:scale(1.06) rotate(20deg);}
+.btn-settings-float:active{transform:scale(.92);}
 /* Commander tab — was visually identical to the other tabs; the Commander
    is a headline feature, so give it a standing gold pill instead of a
    plain text tab. */
@@ -9140,7 +9153,12 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                   // Phase-relevant abilities
                   const phaseAbilNames={0:['command','aura','buff'],1:['move','advance','swift','scout'],2:['shoot','fire','range'],3:['charge','pile in','martial'],4:['fight','melee','combat','attack','strikes']};
                   const relevantAbils=(u.abilities||[]).filter(a=>{
-                    const n=(a.name||'').toLowerCase()+' '+(a.description||'').toLowerCase();
+                    // Leader/Epic Hero/Supreme Commander/Damaged are permanent army-building
+                    // or state-driven rules, never a phase-triggered action — exclude them
+                    // here the same way the other ability lists in the app already do.
+                    const nameOnly=(a.name||'').toLowerCase().trim();
+                    if(nameOnly==='leader'||nameOnly==='supreme commander'||nameOnly==='epic hero'||nameOnly.startsWith('leader (')||nameOnly.startsWith('damaged')) return false;
+                    const n=nameOnly+' '+(a.description||'').toLowerCase();
                     return (phaseAbilNames[phase]||[]).some(kw=>n.includes(kw));
                   });
 
@@ -9353,7 +9371,12 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                               const slots=[];
                               comp.forEach(c=>{
                                 const desc=stripHTML(c.description||c.desc||String(c));
-                                const m=desc.match(/^(\d+)\s+(.+)/);
+                                // Range entries ("9-19 Boyz") have no space between the
+                                // count and the dash, so this must be checked BEFORE the
+                                // plain "N Name" match below — otherwise it falls through
+                                // and the raw "9-19 Boyz" string gets used as a model name.
+                                const rangeM=desc.match(/^(\d+)-\d+\s+(.+)/);
+                                const m=rangeM||desc.match(/^(\d+)\s+(.+)/);
                                 if(m){
                                   const cnt=parseInt(m[1]), nm=m[2].trim();
                                   for(let i=0;i<cnt;i++) slots.push(nm);
@@ -10381,6 +10404,140 @@ function App(){
   );
 
   // ── BATTLE MODE ──
+  // Settings & Backup as its own component (closes over all the App-level
+  // state above via JS closure) so it can be summoned from every screen —
+  // including the ones that return early below (war-hub/commander/
+  // game-setup/battle) before ever reaching the default render path.
+  function SettingsModal(){
+    return (<>
+    {/* ── SETTINGS / BACKUP MODAL ── */}
+    {showSettings&&(
+      <div className="modal-overlay" style={{zIndex:400}} onClick={()=>setShowSettings(false)}>
+        <div className="modal anim-slide-up" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div className="modal-title" style={{marginBottom:0}}>Settings & Backup</div>
+            <button className="btn btn-ghost btn-xs" onClick={()=>setShowSettings(false)}>✕</button>
+          </div>
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Local Data</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
+            Your collection, armies and battles are saved on this device.
+            Storage protection: {storagePersisted===true
+              ?<span style={{color:'var(--greenBright)'}}>granted — the browser will not auto-delete your data</span>
+              :storagePersisted===false
+                ?<span style={{color:'#ddcc44'}}>not granted — export a backup now and then; adding this page to your Home Screen usually grants it</span>
+                :'checking…'}
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:6}}>
+            <button className="btn btn-gold btn-sm" style={{flex:1}} onClick={exportBackup}>⇩ Export Backup</button>
+            <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>importInputRef.current?.click()}>⇧ Restore Backup</button>
+            <input ref={importInputRef} type="file" accept=".json,application/json" style={{display:'none'}}
+              onChange={e=>{importBackup(e.target.files?.[0]);e.target.value='';}}/>
+          </div>
+          <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginBottom:14}}>
+            Note: photos you've taken of your own models are stored separately on this device and are NOT included in this backup file (they're too large) — they stay safe as long as you don't clear this browser's site data.
+          </div>
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Commander AI (Gemini)</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
+            The in-battle Commander uses Google Gemini. Paste your API key here — it is stored only on this device, never in the app file.
+            Get one free at aistudio.google.com/apikey.
+          </div>
+          <input type="password" placeholder="Gemini API key…" value={geminiKeyDraft}
+            onChange={e=>setGeminiKeyDraft(e.target.value)}
+            style={{width:'100%',fontSize:11,marginBottom:6}}/>
+          <button className="btn btn-gold btn-sm" style={{width:'100%',marginBottom:14}}
+            onClick={()=>{setGeminiKey(geminiKeyDraft);alert(geminiKeyDraft.trim()?'API key saved on this device.':'API key cleared.');}}>
+            Save API Key
+          </button>
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Unit Photos</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
+            Look at every official kit photo in the repo (~900 across all factions) and match each one to its datasheet automatically, instead of doing it faction-by-faction from the Armoury. Uses your Gemini key above and can take a while — safe to stop and resume later.
+          </div>
+          <button className="btn btn-outline btn-sm" style={{width:'100%'}} disabled={allIdBusy||!index}
+            onClick={allIdBusy?()=>{allIdCancelRef.current=true;}:runAllFactionsIdentify}>
+            {allIdBusy?'Stop':'🔍 Auto-Identify Photos — All Factions'}
+          </button>
+          {allIdProgress&&<div style={{fontSize:9,color:'var(--brass)',marginTop:6,lineHeight:1.5}}>{allIdProgress}</div>}
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Audio</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
+            Ambient soundtrack, weapon/event sound effects and Commander speech — all generated on-device, nothing recorded or streamed.
+          </div>
+          <button className="btn btn-outline btn-sm" style={{width:'100%',marginBottom:8}}
+            onClick={()=>updateAudio({muted:!audioSettings.muted})}>
+            {audioSettings.muted?'🔇 Unmute All Audio':'🔊 Mute All Audio'}
+          </button>
+          {[
+            {key:'master',label:'Master Volume'},
+            {key:'music',label:'Ambient Music'},
+            {key:'sfx',label:'Sound Effects'},
+            {key:'voice',label:'Commander Voice'},
+          ].map(s=>(
+            <div key={s.key} style={{marginBottom:8,opacity:audioSettings.muted?0.5:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)',marginBottom:3}}>
+                <span>{s.label}</span><span>{Math.round(audioSettings[s.key]*100)}%</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" value={audioSettings[s.key]} disabled={audioSettings.muted}
+                onChange={e=>updateAudio({[s.key]:parseFloat(e.target.value)})}
+                style={{width:'100%'}}/>
+            </div>
+          ))}
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:10,color:'var(--text2)',marginTop:4,cursor:'pointer'}}>
+            <input type="checkbox" checked={audioSettings.voiceEnabled} onChange={e=>updateAudio({voiceEnabled:e.target.checked})}/>
+            Speak Commander reactions aloud (uses this browser's built-in text-to-speech)
+          </label>
+
+          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Import Sound Pack (Personal Use)</div>
+          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
+            Drop in your own audio — anything you already own — as a local override for weapon/event SFX and Commander voice barks. Everything happens in this browser: the zip is read on-device and the matched clips are stored in this browser's local storage only. Nothing is uploaded, nothing is committed to the repo, nothing leaves this device.
+            <br/><br/>
+            Two layouts are recognised: a flat folder of weapon/event sounds (matched by keyword — "bolter", "las", "plasma", "chain", "impact"…), or a Dawn-of-War-style <code>race/unit/category</code> layout, where a commander-ish unit folder (force_commander, warboss, farseer, commander, canoness, archon, lord, captain) becomes that faction's voice bank for charge/attack/ability/morale barks.
+          </div>
+          {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
+            <div style={{fontSize:10,color:'var(--gold)',marginBottom:8}}>
+              Currently imported: {importedSoundCounts.sfx} SFX key(s), {importedSoundCounts.voice} voice categor{importedSoundCounts.voice===1?'y':'ies'}.
+            </div>
+          )}
+          <input ref={soundImportInputRef} type="file" accept=".zip" multiple style={{display:'none'}}
+            onChange={e=>{handleSoundPackFiles([...(e.target.files||[])]);e.target.value='';}}/>
+          <div style={{display:'flex',gap:8,marginBottom:6}}>
+            <button className="btn btn-outline btn-sm" style={{flex:1}} disabled={soundImportBusy}
+              onClick={()=>soundImportInputRef.current?.click()}>
+              {soundImportBusy?'Processing…':'📦 Choose Sound Pack .zip'}
+            </button>
+            {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
+              <button className="btn btn-danger btn-sm" disabled={soundImportBusy} onClick={clearImportedSounds}>Clear</button>
+            )}
+          </div>
+          {soundImportMsg&&<div style={{fontSize:10,color:'var(--text3)',marginBottom:6,lineHeight:1.5}}>{soundImportMsg}</div>}
+          {soundImportReview&&(
+            <div style={{background:'var(--bg2)',border:'1px solid var(--goldborder)',padding:10,marginBottom:8}}>
+              {Object.keys(soundImportReview.sfx).length>0&&(
+                <div style={{marginBottom:6}}>
+                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>SFX matched:</div>
+                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.sfx).join(', ')}</div>
+                </div>
+              )}
+              {Object.keys(soundImportReview.voice).length>0&&(
+                <div style={{marginBottom:6}}>
+                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>Voice categories matched:</div>
+                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.voice).join(', ')}</div>
+                </div>
+              )}
+              <div style={{display:'flex',gap:8,marginTop:8}}>
+                <button className="btn btn-gold btn-sm" style={{flex:1}} disabled={soundImportBusy} onClick={saveSoundImportReview}>Save These Sounds</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{setSoundImportReview(null);setSoundImportMsg('');}}>Discard</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+    </>);
+  }
+
   if(screen==='war-hub'){
     return(
       <div className="app open" style={{display:'flex',flexDirection:'column'}}>
@@ -10392,6 +10549,8 @@ function App(){
           armies={armies}
           onBack={()=>{setAppOpen(false);setScreen('armies');}}
         />
+        <button className="btn-settings-float" onClick={()=>setShowSettings(true)} title="Settings & Backup">⚙</button>
+        <SettingsModal/>
       </div>
     );
   }
@@ -10400,6 +10559,8 @@ function App(){
     return(
       <div className="app open" style={{display:'flex',flexDirection:'column'}}>
         <CommanderScreen armies={armies} onBack={()=>setScreen('armies')}/>
+        <button className="btn-settings-float" onClick={()=>setShowSettings(true)} title="Settings & Backup">⚙</button>
+        <SettingsModal/>
       </div>
     );
   }
@@ -10414,6 +10575,8 @@ function App(){
           onStart={(battleData)=>{setBattle(battleData);setScreen('battle');}}
           onFixArmy={(armyId)=>{setActiveId(armyId);setTab('roster');setScreen('army');}}
         />
+        <button className="btn-settings-float" onClick={()=>setShowSettings(true)} title="Settings & Backup">⚙</button>
+        <SettingsModal/>
       </div>
     );
   }
@@ -10441,6 +10604,8 @@ function App(){
             setBattle(null);setScreen('war-hub');
           }}
         />
+        <button className="btn-settings-float" onClick={()=>setShowSettings(true)} title="Settings & Backup">⚙</button>
+        <SettingsModal/>
       </div>
     );
   }
@@ -12122,6 +12287,8 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
       {screen==='aos-warscrolls'&&<StableAoSWarscrollsScreen/>}
     </div>
 
+    <button className="btn-settings-float" onClick={()=>setShowSettings(true)} title="Settings & Backup">⚙</button>
+
     {/* ── GAME-SYSTEM TRANSITION CINEMATIC ── */}
     {menuTransition&&(
       <div style={{position:'fixed',inset:0,zIndex:500,background:'#000',display:'flex',alignItems:'center',justifyContent:'center'}}
@@ -12138,131 +12305,7 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
       </div>
     )}
 
-    {/* ── SETTINGS / BACKUP MODAL ── */}
-    {showSettings&&(
-      <div className="modal-overlay" style={{zIndex:400}} onClick={()=>setShowSettings(false)}>
-        <div className="modal anim-slide-up" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-            <div className="modal-title" style={{marginBottom:0}}>Settings & Backup</div>
-            <button className="btn btn-ghost btn-xs" onClick={()=>setShowSettings(false)}>✕</button>
-          </div>
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Local Data</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
-            Your collection, armies and battles are saved on this device.
-            Storage protection: {storagePersisted===true
-              ?<span style={{color:'var(--greenBright)'}}>granted — the browser will not auto-delete your data</span>
-              :storagePersisted===false
-                ?<span style={{color:'#ddcc44'}}>not granted — export a backup now and then; adding this page to your Home Screen usually grants it</span>
-                :'checking…'}
-          </div>
-          <div style={{display:'flex',gap:8,marginBottom:6}}>
-            <button className="btn btn-gold btn-sm" style={{flex:1}} onClick={exportBackup}>⇩ Export Backup</button>
-            <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>importInputRef.current?.click()}>⇧ Restore Backup</button>
-            <input ref={importInputRef} type="file" accept=".json,application/json" style={{display:'none'}}
-              onChange={e=>{importBackup(e.target.files?.[0]);e.target.value='';}}/>
-          </div>
-          <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.5,marginBottom:14}}>
-            Note: photos you've taken of your own models are stored separately on this device and are NOT included in this backup file (they're too large) — they stay safe as long as you don't clear this browser's site data.
-          </div>
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Commander AI (Gemini)</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
-            The in-battle Commander uses Google Gemini. Paste your API key here — it is stored only on this device, never in the app file.
-            Get one free at aistudio.google.com/apikey.
-          </div>
-          <input type="password" placeholder="Gemini API key…" value={geminiKeyDraft}
-            onChange={e=>setGeminiKeyDraft(e.target.value)}
-            style={{width:'100%',fontSize:11,marginBottom:6}}/>
-          <button className="btn btn-gold btn-sm" style={{width:'100%',marginBottom:14}}
-            onClick={()=>{setGeminiKey(geminiKeyDraft);alert(geminiKeyDraft.trim()?'API key saved on this device.':'API key cleared.');}}>
-            Save API Key
-          </button>
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5}}>Unit Photos</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:6}}>
-            Look at every official kit photo in the repo (~900 across all factions) and match each one to its datasheet automatically, instead of doing it faction-by-faction from the Armoury. Uses your Gemini key above and can take a while — safe to stop and resume later.
-          </div>
-          <button className="btn btn-outline btn-sm" style={{width:'100%'}} disabled={allIdBusy||!index}
-            onClick={allIdBusy?()=>{allIdCancelRef.current=true;}:runAllFactionsIdentify}>
-            {allIdBusy?'Stop':'🔍 Auto-Identify Photos — All Factions'}
-          </button>
-          {allIdProgress&&<div style={{fontSize:9,color:'var(--brass)',marginTop:6,lineHeight:1.5}}>{allIdProgress}</div>}
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Audio</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
-            Ambient soundtrack, weapon/event sound effects and Commander speech — all generated on-device, nothing recorded or streamed.
-          </div>
-          <button className="btn btn-outline btn-sm" style={{width:'100%',marginBottom:8}}
-            onClick={()=>updateAudio({muted:!audioSettings.muted})}>
-            {audioSettings.muted?'🔇 Unmute All Audio':'🔊 Mute All Audio'}
-          </button>
-          {[
-            {key:'master',label:'Master Volume'},
-            {key:'music',label:'Ambient Music'},
-            {key:'sfx',label:'Sound Effects'},
-            {key:'voice',label:'Commander Voice'},
-          ].map(s=>(
-            <div key={s.key} style={{marginBottom:8,opacity:audioSettings.muted?0.5:1}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)',marginBottom:3}}>
-                <span>{s.label}</span><span>{Math.round(audioSettings[s.key]*100)}%</span>
-              </div>
-              <input type="range" min="0" max="1" step="0.05" value={audioSettings[s.key]} disabled={audioSettings.muted}
-                onChange={e=>updateAudio({[s.key]:parseFloat(e.target.value)})}
-                style={{width:'100%'}}/>
-            </div>
-          ))}
-          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:10,color:'var(--text2)',marginTop:4,cursor:'pointer'}}>
-            <input type="checkbox" checked={audioSettings.voiceEnabled} onChange={e=>updateAudio({voiceEnabled:e.target.checked})}/>
-            Speak Commander reactions aloud (uses this browser's built-in text-to-speech)
-          </label>
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Import Sound Pack (Personal Use)</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
-            Drop in your own audio — anything you already own — as a local override for weapon/event SFX and Commander voice barks. Everything happens in this browser: the zip is read on-device and the matched clips are stored in this browser's local storage only. Nothing is uploaded, nothing is committed to the repo, nothing leaves this device.
-            <br/><br/>
-            Two layouts are recognised: a flat folder of weapon/event sounds (matched by keyword — "bolter", "las", "plasma", "chain", "impact"…), or a Dawn-of-War-style <code>race/unit/category</code> layout, where a commander-ish unit folder (force_commander, warboss, farseer, commander, canoness, archon, lord, captain) becomes that faction's voice bank for charge/attack/ability/morale barks.
-          </div>
-          {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
-            <div style={{fontSize:10,color:'var(--gold)',marginBottom:8}}>
-              Currently imported: {importedSoundCounts.sfx} SFX key(s), {importedSoundCounts.voice} voice categor{importedSoundCounts.voice===1?'y':'ies'}.
-            </div>
-          )}
-          <input ref={soundImportInputRef} type="file" accept=".zip" multiple style={{display:'none'}}
-            onChange={e=>{handleSoundPackFiles([...(e.target.files||[])]);e.target.value='';}}/>
-          <div style={{display:'flex',gap:8,marginBottom:6}}>
-            <button className="btn btn-outline btn-sm" style={{flex:1}} disabled={soundImportBusy}
-              onClick={()=>soundImportInputRef.current?.click()}>
-              {soundImportBusy?'Processing…':'📦 Choose Sound Pack .zip'}
-            </button>
-            {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
-              <button className="btn btn-danger btn-sm" disabled={soundImportBusy} onClick={clearImportedSounds}>Clear</button>
-            )}
-          </div>
-          {soundImportMsg&&<div style={{fontSize:10,color:'var(--text3)',marginBottom:6,lineHeight:1.5}}>{soundImportMsg}</div>}
-          {soundImportReview&&(
-            <div style={{background:'var(--bg2)',border:'1px solid var(--goldborder)',padding:10,marginBottom:8}}>
-              {Object.keys(soundImportReview.sfx).length>0&&(
-                <div style={{marginBottom:6}}>
-                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>SFX matched:</div>
-                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.sfx).join(', ')}</div>
-                </div>
-              )}
-              {Object.keys(soundImportReview.voice).length>0&&(
-                <div style={{marginBottom:6}}>
-                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>Voice categories matched:</div>
-                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.voice).join(', ')}</div>
-                </div>
-              )}
-              <div style={{display:'flex',gap:8,marginTop:8}}>
-                <button className="btn btn-gold btn-sm" style={{flex:1}} disabled={soundImportBusy} onClick={saveSoundImportReview}>Save These Sounds</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>{setSoundImportReview(null);setSoundImportMsg('');}}>Discard</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
+    <SettingsModal/>
   </>);
 }
 
