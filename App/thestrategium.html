@@ -9369,8 +9369,8 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                 const alreadyActive=activeEffects.some(fx=>fx.name===a.name&&fx.unitId===entry.id);
                                 return(
                                   <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3,padding:'4px 6px',background:'var(--bg2)',border:`1px solid ${alreadyActive?'var(--gold)':'var(--border)'}`}}>
-                                    <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:10,color:alreadyActive?'var(--gold)':'var(--text)',letterSpacing:.3}}>{a.name}</div>
+                                    <div style={{flex:1,minWidth:0,cursor:'pointer'}} onClick={()=>setAbilityIntel(a)} title="Tap for full ability info">
+                                      <div style={{fontSize:10,color:alreadyActive?'var(--gold)':'var(--text)',letterSpacing:.3,textDecoration:'underline dotted rgba(200,168,75,.4)'}}>{a.name}</div>
                                       {parsed?.leaderOnly&&<div style={{fontSize:8,color:'var(--blueBright)',letterSpacing:.5}}>Leader only</div>}
                                     </div>
                                     {alreadyActive?(
