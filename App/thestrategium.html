@@ -2114,6 +2114,30 @@ const FACTION_ICONS = {
   'GC':'GC','LoV':'LV','QI':'QI','QT':'QT','AoI':'AI',
 };
 
+// Real faction heraldry, cropped from the official icon set — used instead
+// of the plain 2-letter initials wherever a faction is identified. Only
+// covers factions we have a confidently-labelled source icon for; anything
+// else falls back to FACTION_ICONS above rather than guessing at artwork.
+const LOGO_BASE='https://raw.githubusercontent.com/7moud7/The-Strategium/main/WH40K/Images/App/Logos/';
+const FACTION_LOGO_FIDS=new Set(['SM','AS','AdM','AE','AoI','AM','CD','CSM','DG','DRU','GC','GK','NEC','ORK','TAU','TYR']);
+function factionLogoURL(fid){ return FACTION_LOGO_FIDS.has(fid) ? LOGO_BASE+fid+'.png' : null; }
+// Drop-in replacement for the plain FACTION_ICONS text badge: shows the
+// real logo image when we have one, and transparently falls back to the
+// initials (both on missing-logo factions and if the image fails to load).
+function FactionBadge({fid, size, className, style}){
+  const [failed,setFailed]=React.useState(false);
+  const logo=factionLogoURL(fid);
+  const dim=size||36;
+  if(logo&&!failed){
+    return(
+      <div className={className} style={{width:dim,height:dim,flexShrink:0,overflow:'hidden',...style}}>
+        <img src={logo} alt={fid} style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setFailed(true)}/>
+      </div>
+    );
+  }
+  return <div className={className} style={{width:dim,height:dim,fontSize:dim*.32,...style}}>{FACTION_ICONS[fid]||'?'}</div>;
+}
+
 
 const SM_CHAPTERS = [
   {id:'generic',name:'Generic Space Marines'},
@@ -5341,7 +5365,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel,onFixArmy}){
                   borderLeft:p1Army===a.id?'3px solid var(--gold)':'3px solid transparent',
                   opacity:takenByP2?0.4:1,
                 }}>
-                <div className="army-faction-mark" style={{width:28,height:28,fontSize:9}}>{FACTION_ICONS[a.factionId]||'?'}</div>
+                <FactionBadge fid={a.factionId} size={28} className="army-faction-mark" style={{fontSize:9}}/>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:'Cinzel,serif',fontSize:11,color:p1Army===a.id?'var(--gold)':'var(--text)',letterSpacing:.5}}>{a.name}</div>
                   <div style={{fontSize:9,color:'var(--text3)',marginTop:2}}>{takenByP2?'Already fielded by Player 2':(a.detachment?.name||'No Detachment')+' · '+(a.units?.length||0)+' units'}</div>
@@ -5363,7 +5387,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel,onFixArmy}){
                       padding:'10px 14px',marginBottom:4,cursor:'pointer',display:'flex',gap:10,alignItems:'center',
                       borderLeft:p2Army===a.id?'3px solid var(--gold)':'3px solid transparent',
                     }}>
-                    <div className="army-faction-mark" style={{width:28,height:28,fontSize:9}}>{FACTION_ICONS[a.factionId]||'?'}</div>
+                    <FactionBadge fid={a.factionId} size={28} className="army-faction-mark" style={{fontSize:9}}/>
                     <div style={{flex:1}}>
                       <div style={{fontFamily:'Cinzel,serif',fontSize:11,color:p2Army===a.id?'var(--gold)':'var(--text)',letterSpacing:.5}}>{a.name}</div>
                       <div style={{fontSize:9,color:'var(--text3)',marginTop:2}}>{a.detachment?.name||'No Detachment'} · {a.units?.length||0} units</div>
@@ -11243,7 +11267,7 @@ function App(){
               setScreen('army');
               loadFaction(a.factionId);
             }}>
-              <div className="army-faction-mark">{FACTION_ICONS[a.factionId]||'?'}</div>
+              <FactionBadge fid={a.factionId} size={36} className="army-faction-mark"/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:800,fontSize:15,letterSpacing:.3}}>{a.name}</div>
                 <div style={{fontSize:11,color:'var(--text3)',marginTop:2,letterSpacing:.3}}>
@@ -11285,7 +11309,7 @@ function App(){
                 await loadFaction(id);
                 setScreen(id==='SM'?'sm-chapter':'detachments');
               }}>
-                <div className="faction-card-icon">{FACTION_ICONS[id]||'?'}</div>
+                <FactionBadge fid={id} size={32} className="faction-card-icon" style={{fontSize:10}}/>
                 <div style={{flex:1}}>
                   <div className="faction-card-name">{f.name}</div>
                   <div className="faction-card-sub">{f.units} units · {f.detachments} detachments</div>
