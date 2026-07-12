@@ -1,0 +1,132 @@
+{
+ "stormcast-eternals": {
+  "name": "Stormcast Eternals",
+  "file": "stormcast-eternals.json",
+  "units": 94
+ },
+ "cities-of-sigmar": {
+  "name": "Cities of Sigmar",
+  "file": "cities-of-sigmar.json",
+  "units": 79
+ },
+ "blades-of-khorne": {
+  "name": "Blades of Khorne",
+  "file": "blades-of-khorne.json",
+  "units": 46
+ },
+ "disciples-of-tzeentch": {
+  "name": "Disciples of Tzeentch",
+  "file": "disciples-of-tzeentch.json",
+  "units": 40
+ },
+ "maggotkin-of-nurgle": {
+  "name": "Maggotkin of Nurgle",
+  "file": "maggotkin-of-nurgle.json",
+  "units": 41
+ },
+ "hedonites-of-slaanesh": {
+  "name": "Hedonites of Slaanesh",
+  "file": "hedonites-of-slaanesh.json",
+  "units": 42
+ },
+ "slaves-to-darkness": {
+  "name": "Slaves to Darkness",
+  "file": "slaves-to-darkness.json",
+  "units": 65
+ },
+ "skaven": {
+  "name": "Skaven",
+  "file": "skaven.json",
+  "units": 56
+ },
+ "soulblight-gravelords": {
+  "name": "Soulblight Gravelords",
+  "file": "soulblight-gravelords.json",
+  "units": 57
+ },
+ "nighthaunt": {
+  "name": "Nighthaunt",
+  "file": "nighthaunt.json",
+  "units": 39
+ },
+ "ossiarch-bonereapers": {
+  "name": "Ossiarch Bonereapers",
+  "file": "ossiarch-bonereapers.json",
+  "units": 35
+ },
+ "flesh-eater-courts": {
+  "name": "Flesh-eater Courts",
+  "file": "flesh-eater-courts.json",
+  "units": 35
+ },
+ "ironjawz": {
+  "name": "Ironjawz",
+  "file": "ironjawz.json",
+  "units": 23
+ },
+ "kruleboyz": {
+  "name": "Kruleboyz",
+  "file": "kruleboyz.json",
+  "units": 24
+ },
+ "gloomspite-gitz": {
+  "name": "Gloomspite Gitz",
+  "file": "gloomspite-gitz.json",
+  "units": 58
+ },
+ "sons-of-behemat": {
+  "name": "Sons of Behemat",
+  "file": "sons-of-behemat.json",
+  "units": 11
+ },
+ "ogor-mawtribes": {
+  "name": "Ogor Mawtribes",
+  "file": "ogor-mawtribes.json",
+  "units": 33
+ },
+ "sylvaneth": {
+  "name": "Sylvaneth",
+  "file": "sylvaneth.json",
+  "units": 35
+ },
+ "daughters-of-khaine": {
+  "name": "Daughters of Khaine",
+  "file": "daughters-of-khaine.json",
+  "units": 35
+ },
+ "idoneth-deepkin": {
+  "name": "Idoneth Deepkin",
+  "file": "idoneth-deepkin.json",
+  "units": 28
+ },
+ "lumineth-realm-lords": {
+  "name": "Lumineth Realm-lords",
+  "file": "lumineth-realm-lords.json",
+  "units": 36
+ },
+ "fyreslayers": {
+  "name": "Fyreslayers",
+  "file": "fyreslayers.json",
+  "units": 26
+ },
+ "kharadron-overlords": {
+  "name": "Kharadron Overlords",
+  "file": "kharadron-overlords.json",
+  "units": 26
+ },
+ "seraphon": {
+  "name": "Seraphon",
+  "file": "seraphon.json",
+  "units": 38
+ },
+ "beasts-of-chaos": {
+  "name": "Beasts of Chaos",
+  "file": "beasts-of-chaos.json",
+  "units": 26
+ },
+ "bonesplitterz": {
+  "name": "Bonesplitterz",
+  "file": "bonesplitterz.json",
+  "units": 12
+ }
+}
