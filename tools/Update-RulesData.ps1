@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $repo   = Split-Path $PSScriptRoot -Parent
-$csvDir = Join-Path (Split-Path $repo -Parent) "Warhammer data"
+$csvDir = Join-Path (Split-Path $repo -Parent) "Reference\Data Exports"
 $dataDir = Join-Path $repo "WH40K\Data\Unit Data"
 $base = "https://wahapedia.ru/wh40k10ed/"
 $UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
