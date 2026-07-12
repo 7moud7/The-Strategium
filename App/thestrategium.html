@@ -836,7 +836,10 @@ function setUnitImage(fid,uid,path){
 function unitImageURL(fid,uid){
   const p=getUnitImageMap()[`${fid}:${uid}`];
   if(p) return IMAGES_BASE+encodeURI(p);
-  const auto=(UNIT_IMAGES_REPO?.[fid]?.[uid])||(window.UNIT_IMAGES_DEFAULT?.[fid]?.[uid]);
+  // The embedded map ships with (and matches) this build of the app, so it
+  // wins; the repo copy — which can be a stale CDN-cached read — only fills
+  // units the embedded map doesn't know about.
+  const auto=(window.UNIT_IMAGES_DEFAULT?.[fid]?.[uid])||(UNIT_IMAGES_REPO?.[fid]?.[uid]);
   return decodeUnitImage(auto);
 }
 // ── CUSTOM UNIT PHOTOS (your own camera shots) ──────────────────────────────
