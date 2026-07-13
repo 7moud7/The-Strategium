@@ -68,9 +68,13 @@ body::before{content:'';position:fixed;inset:0;background:#09090e;z-index:9999;p
 /* ── MENU ── */
 .menu-root{
   position:fixed;inset:0;z-index:10;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
   background:var(--bg0);
-  overflow:hidden;
+  /* scroll when the menu is taller than the window — justify-content:center
+     with overflow:hidden clipped BOTH ends on short/desktop windows and the
+     top half became unreachable. margin:auto on .menu-center keeps it
+     centered whenever it fits. */
+  overflow-y:auto;overflow-x:hidden;
 }
 .menu-root::before{
   content:'';position:absolute;inset:0;
@@ -84,7 +88,7 @@ body::before{content:'';position:fixed;inset:0;background:#09090e;z-index:9999;p
   background-size:60px 52px;
   opacity:.6;
 }
-.menu-center{position:relative;text-align:center;padding:40px 32px;max-width:380px;width:100%}
+.menu-center{position:relative;text-align:center;padding:40px 32px;max-width:380px;width:100%;margin:auto;flex-shrink:0}
 .menu-aquila{font-size:48px;margin-bottom:24px;opacity:.7;filter:sepia(1) hue-rotate(10deg)}
 .menu-eyebrow{
   font-family:'Cinzel',serif;font-size:9px;letter-spacing:6px;
@@ -213,11 +217,11 @@ input::placeholder{color:var(--text3)}
 
 /* ── FACTION CARD ── */
 .faction-list{display:flex;flex-direction:column;gap:6px}
-.faction-card-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;opacity:.34;pointer-events:none;mask-image:linear-gradient(to right,transparent 0%,black 45%);-webkit-mask-image:linear-gradient(to right,transparent 0%,black 45%)}
+.faction-card-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;opacity:.5;pointer-events:none;mask-image:linear-gradient(to right,rgba(0,0,0,.55) 0%,black 55%);-webkit-mask-image:linear-gradient(to right,rgba(0,0,0,.55) 0%,black 55%)}
 .faction-card>*:not(.faction-card-cover){position:relative;z-index:1}
 .faction-card{
   background:var(--bg1);border:1px solid var(--border);
-  padding:12px 16px;cursor:pointer;
+  padding:14px 16px;cursor:pointer;min-height:72px;
   display:flex;align-items:center;gap:14px;
   transition:border-color .2s,background .2s;
   position:relative;overflow:hidden;
@@ -888,6 +892,92 @@ function getCustomPhoto(fid,uid){ return idbGetPhoto(`${fid}:${uid}`); }
 function saveCustomPhoto(fid,uid,dataURL){ return idbSetPhoto(`${fid}:${uid}`,dataURL); }
 function deleteCustomPhoto(fid,uid){ return idbDeletePhoto(`${fid}:${uid}`); }
 
+// ── ARMY LIST EXPORT ────────────────────────────────────────────────────────
+// Two interop formats:
+//  1. GW-app text — the format New Recruit's "import from text" and most
+//     tournament organisers accept.
+//  2. BattleScribe roster XML (.ros) — readable by BattleScribe/New Recruit;
+//     uses the real BSData 10th-edition gameSystemId so importers recognise
+//     the system, with name-based selections (no per-entry catalogue GUIDs).
+const BS_GAME_SYSTEM={id:'sys-352e-adc2-7639-d6a9',name:'Warhammer 40,000 10th Edition',revision:'119',ptsTypeId:'51b2-306e-1021-d207'};
+function exportRoleBucket(u){
+  const r=(u.role||'').toLowerCase();
+  if(r.includes('character')||r.includes('hq')||isEpicHero(u)) return 'CHARACTERS';
+  if(r.includes('battleline')||r.includes('troop')) return 'BATTLELINE';
+  if(r.includes('transport')) return 'DEDICATED TRANSPORTS';
+  return 'OTHER DATASHEETS';
+}
+function buildGWListText(army){
+  const entries=army.units||[];
+  const total=entries.reduce((s,e)=>s+pts(e.unit,e.sizeIdx),0);
+  const limit=army.pointsLimit||2000;
+  const sizeName=limit<=1000?'Incursion':limit<=2000?'Strike Force':'Onslaught';
+  const L=[];
+  L.push(`${army.name} (${total} points)`);
+  L.push('');
+  L.push(army.chapter?`${army.factionName} — ${army.chapter}`:army.factionName);
+  L.push(`${sizeName} (${limit} points)`);
+  if(army.detachment?.name) L.push(army.detachment.name);
+  L.push('');
+  for(const bucket of ['CHARACTERS','BATTLELINE','DEDICATED TRANSPORTS','OTHER DATASHEETS']){
+    const inBucket=entries.filter(e=>exportRoleBucket(e.unit)===bucket);
+    if(!inBucket.length) continue;
+    L.push(bucket);
+    L.push('');
+    for(const e of inBucket){
+      const u=e.unit;
+      L.push(`${stripHTML(u.name)} (${pts(u,e.sizeIdx)} points)`);
+      if(army.warlordId===e.id) L.push('  • Warlord');
+      const sizeDesc=u.costs?.[e.sizeIdx||0]?.description;
+      if(sizeDesc) L.push(`  • ${sizeDesc}`);
+      if(e.nickname) L.push(`  • "${e.nickname}"`);
+      L.push('');
+    }
+  }
+  L.push(`Exported from The Strategium`);
+  return L.join('\n');
+}
+function xmlEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function bsId(){ return (crypto.randomUUID?crypto.randomUUID():('id-'+Math.random().toString(36).slice(2))).slice(0,19); }
+function buildRosXML(army){
+  const entries=army.units||[];
+  const total=entries.reduce((s,e)=>s+pts(e.unit,e.sizeIdx),0);
+  const G=BS_GAME_SYSTEM;
+  const sels=entries.map(e=>{
+    const u=e.unit;
+    const p=pts(u,e.sizeIdx);
+    const cat=exportRoleBucket(u);
+    const models=u.costs?.[e.sizeIdx||0]?.description||'';
+    return `      <selection id="${bsId()}" name="${xmlEsc(stripHTML(u.name))}" number="1" type="unit" customName="${xmlEsc(e.nickname||'')}">
+        <costs><cost name="pts" typeId="${G.ptsTypeId}" value="${p}"/></costs>
+        <categories><category id="${bsId()}" name="${xmlEsc(cat)}" primary="true"/></categories>
+        ${models?`<customNotes>${xmlEsc(models)}${army.warlordId===e.id?' — Warlord':''}</customNotes>`:''}
+      </selection>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<roster id="${bsId()}" name="${xmlEsc(army.name)}" battleScribeVersion="2.03"
+  gameSystemId="${G.id}" gameSystemName="${xmlEsc(G.name)}" gameSystemRevision="${G.revision}"
+  xmlns="http://www.battlescribe.net/schema/rosterSchema">
+  <costs><cost name="pts" typeId="${G.ptsTypeId}" value="${total}"/></costs>
+  <costLimits><costLimit name="pts" typeId="${G.ptsTypeId}" value="${army.pointsLimit||2000}"/></costLimits>
+  <forces>
+    <force id="${bsId()}" name="${xmlEsc(army.detachment?.name||'Detachment')}" catalogueId="${bsId()}" catalogueRevision="1" catalogueName="${xmlEsc(army.factionName||'')}">
+      <selections>
+${sels}
+      </selections>
+    </force>
+  </forces>
+</roster>`;
+}
+function downloadTextFile(filename,text,mime){
+  const blob=new Blob([text],{type:mime||'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
 // Read a File/Blob into a base64 data URL
 function fileToDataURL(file){
   return new Promise((resolve,reject)=>{
@@ -896,6 +986,200 @@ function fileToDataURL(file){
     r.onerror=()=>reject(r.error);
     r.readAsDataURL(file);
   });
+}
+
+// ── PAINT DATABASE ──────────────────────────────────────────────────────────
+// 3,000+ hobby paints with hex codes, organised by brand (sourced from The
+// Painting Ledger's open database, mirrored in WH40K/Data/paints.json).
+let PAINT_DB=null;
+async function loadPaintDB(){
+  if(PAINT_DB) return PAINT_DB;
+  PAINT_DB=(await fetchRepoJSON('WH40K/Data/paints.json'))||{brands:{}};
+  return PAINT_DB;
+}
+// Per-model paint log: which paints were used, and (optionally) WHERE on the
+// model's photo — pins carry x/y as percentages of the photo box.
+function getModelPaintLog(key){
+  try{ return (JSON.parse(localStorage.getItem('wh40k_paintlog'))||{})[key]||[]; }catch(e){ return []; }
+}
+function setModelPaintLog(key,pins){
+  try{
+    const m=JSON.parse(localStorage.getItem('wh40k_paintlog'))||{};
+    if(pins&&pins.length) m[key]=pins; else delete m[key];
+    localStorage.setItem('wh40k_paintlog',JSON.stringify(m));
+  }catch(e){}
+}
+
+// ── STUDIO PHOTO EDITOR ─────────────────────────────────────────────────────
+// Composites a model photo onto a neutral GW-style studio backdrop. Only
+// POSITION and SCALE are editable — colours are never touched, no filters.
+function StudioPhotoEditor({src,onSave,onCancel}){
+  const W=900,H=680;
+  const canvasRef=React.useRef(null);
+  const dragRef=React.useRef(null);
+  const [img,setImg]=React.useState(null);
+  const [pos,setPos]=React.useState({x:W/2,y:H/2,scale:1});
+  React.useEffect(()=>{
+    const i=new Image();
+    i.onload=()=>{ const s=Math.min(W/i.width,H/i.height)*0.92; setPos({x:W/2,y:H/2,scale:s}); setImg(i); };
+    i.src=src;
+  },[src]);
+  React.useEffect(()=>{
+    const cv=canvasRef.current; if(!cv||!img) return;
+    const ctx=cv.getContext('2d');
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#f5f3ef'); g.addColorStop(.72,'#dedbd4'); g.addColorStop(1,'#cdc9c1');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.translate(W/2,H*0.84); ctx.scale(1,.26);
+    const rg=ctx.createRadialGradient(0,0,10,0,0,W*.32);
+    rg.addColorStop(0,'rgba(0,0,0,.16)'); rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(0,0,W*.32,0,7); ctx.fill(); ctx.restore();
+    const w=img.width*pos.scale,h=img.height*pos.scale;
+    ctx.drawImage(img,pos.x-w/2,pos.y-h/2,w,h);
+  },[img,pos]);
+  function toCanvas(e){
+    const r=canvasRef.current.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)};
+  }
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.94)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,padding:12}}>
+      <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',letterSpacing:1}}>Position your model — drag to move, slider to zoom</div>
+      <canvas ref={canvasRef} width={W} height={H}
+        style={{maxWidth:'94vw',maxHeight:'62vh',border:'1px solid var(--goldborder)',touchAction:'none',cursor:'grab'}}
+        onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);dragRef.current={start:toCanvas(e),orig:{...pos}};}}
+        onPointerMove={e=>{ if(!dragRef.current) return; const p=toCanvas(e); setPos({...dragRef.current.orig, x:dragRef.current.orig.x+(p.x-dragRef.current.start.x), y:dragRef.current.orig.y+(p.y-dragRef.current.start.y)}); }}
+        onPointerUp={()=>{dragRef.current=null;}}/>
+      <input type="range" min="0.1" max="3" step="0.02" value={pos.scale}
+        onChange={e=>setPos(p=>({...p,scale:parseFloat(e.target.value)}))}
+        style={{width:'min(420px,80vw)'}}/>
+      <div style={{display:'flex',gap:8}}>
+        <button className="btn btn-gold" onClick={()=>onSave(canvasRef.current.toDataURL('image/jpeg',0.9))}>✓ Save Photo</button>
+        <button className="btn btn-outline" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── MODEL DETAIL (Collection) ───────────────────────────────────────────────
+// Per-model view: custom name, studio photo, and the paint log — pick a paint
+// (organised by brand) then tap the photo exactly where it was used.
+function ModelDetailModal({unitKey,unitName,modelIdx,displayName,onRename,onClose}){
+  const photoKey=`model:${unitKey}:${modelIdx}`;
+  const logKey=`${unitKey}:${modelIdx}`;
+  const [photo,setPhoto]=React.useState(null);
+  const [rawCapture,setRawCapture]=React.useState(null);
+  const [name,setName]=React.useState(displayName||'');
+  const [pins,setPins]=React.useState(()=>getModelPaintLog(logKey));
+  const [db,setDb]=React.useState(PAINT_DB);
+  const [brand,setBrand]=React.useState('Citadel');
+  const [q,setQ]=React.useState('');
+  const [pending,setPending]=React.useState(null);
+  const [ver,setVer]=React.useState(0);
+  const fileRef=React.useRef(null);
+  React.useEffect(()=>{ let ok=true; idbGetPhoto(photoKey).then(p=>{ if(ok) setPhoto(p); }); return ()=>{ok=false;}; },[photoKey,ver]);
+  React.useEffect(()=>{ if(!db) loadPaintDB().then(setDb); },[]);
+  function savePins(p){ setPins(p); setModelPaintLog(logKey,p); }
+  const brands=db?Object.keys(db.brands||{}):[];
+  const paints=(db&&db.brands?.[brand])||[];
+  const filtered=paints.filter(p=>!q||p.name.toLowerCase().includes(q.toLowerCase())).slice(0,40);
+  return(
+    <div className="modal-overlay" style={{zIndex:650}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="modal anim-slide-up" style={{maxWidth:480,maxHeight:'90vh',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div className="modal-title" style={{marginBottom:0}}>{unitName} — Model {modelIdx+1}</div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        {/* name */}
+        <div style={{display:'flex',gap:6,marginBottom:10}}>
+          <input value={name} placeholder="Name this model (e.g. Brother Castiel)"
+            onChange={e=>setName(e.target.value)} style={{flex:1,fontSize:12}}/>
+          <button className="btn btn-outline btn-sm" onClick={()=>onRename(name.trim())}>Save</button>
+        </div>
+        {/* photo + pins */}
+        <div style={{marginBottom:10}}>
+          {photo?(
+            <div style={{position:'relative',border:'1px solid var(--goldborder)'}}>
+              <img src={photo} alt="" style={{width:'100%',display:'block',cursor:pending?'crosshair':'default'}}
+                onClick={e=>{
+                  if(!pending) return;
+                  const r=e.target.getBoundingClientRect();
+                  const x=Math.round(((e.clientX-r.left)/r.width)*1000)/10;
+                  const y=Math.round(((e.clientY-r.top)/r.height)*1000)/10;
+                  savePins([...pins,{...pending,x,y}]);
+                  setPending(null);
+                }}/>
+              {pins.filter(p=>p.x!=null).map((p,i)=>(
+                <div key={i} title={`${p.brand} — ${p.name} (tap to remove)`}
+                  onClick={()=>{ if(confirm(`Remove ${p.name} pin?`)) savePins(pins.filter((_,j)=>j!==i)); }}
+                  style={{position:'absolute',left:`${p.x}%`,top:`${p.y}%`,transform:'translate(-50%,-50%)',
+                    width:16,height:16,borderRadius:'50%',background:p.hex,border:'2px solid #fff',
+                    boxShadow:'0 0 4px rgba(0,0,0,.8)',cursor:'pointer'}}/>
+              ))}
+              {pending&&(
+                <div style={{position:'absolute',top:6,left:6,right:6,background:'rgba(0,0,0,.85)',border:'1px solid var(--gold)',color:'var(--gold)',fontSize:10,padding:'6px 8px',textAlign:'center'}}>
+                  Tap the photo exactly where you used <b>{pending.name}</b>
+                  <button className="btn btn-ghost btn-xs" style={{marginLeft:8}} onClick={()=>setPending(null)}>cancel</button>
+                </div>
+              )}
+            </div>
+          ):(
+            <div style={{border:'1px dashed var(--border)',padding:18,textAlign:'center',fontSize:10,color:'var(--text3)'}}>
+              No photo of this model yet
+            </div>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:'none'}}
+            onChange={async e=>{ const f=e.target.files?.[0]; e.target.value=''; if(f) setRawCapture(await fileToDataURL(f)); }}/>
+          <div style={{display:'flex',gap:6,marginTop:6}}>
+            <button className="btn btn-outline btn-sm" style={{flex:1}} onClick={()=>fileRef.current?.click()}>📷 {photo?'Retake / Replace':'Take or Upload Photo'}</button>
+            {photo&&<button className="btn btn-ghost btn-sm" onClick={async()=>{ if(confirm('Remove this photo?')){ await idbDeletePhoto(photoKey); setVer(v=>v+1);} }}>🗑</button>}
+          </div>
+        </div>
+        {/* paint log */}
+        <div style={{fontSize:9,letterSpacing:2,color:'var(--brass)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',marginBottom:5}}>Paints Used</div>
+        {pins.length>0&&(
+          <div style={{marginBottom:8}}>
+            {pins.map((p,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'4px 6px',marginBottom:2,background:'var(--bg2)',border:'1px solid var(--border)'}}>
+                <span style={{width:14,height:14,background:p.hex,border:'1px solid #0006',flexShrink:0}}/>
+                <span style={{flex:1,fontSize:10,color:'var(--text)'}}>{p.name}</span>
+                <span style={{fontSize:8,color:'var(--text3)'}}>{p.brand}{p.type?` · ${p.type}`:''}{p.x!=null?' · 📍':''}</span>
+                <button className="btn btn-ghost btn-xs" onClick={()=>savePins(pins.filter((_,j)=>j!==i))}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {!db?(
+          <div style={{fontSize:10,color:'var(--text3)'}}>Loading paint database…</div>
+        ):(<>
+          <div style={{display:'flex',gap:6,marginBottom:6}}>
+            <select value={brand} onChange={e=>setBrand(e.target.value)} style={{fontSize:11,flex:1}}>
+              {brands.map(b=><option key={b} value={b}>{b} ({(db.brands[b]||[]).length})</option>)}
+            </select>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search paints…" style={{flex:1,fontSize:11}}/>
+          </div>
+          <div style={{maxHeight:180,overflowY:'auto',border:'1px solid var(--border)'}}>
+            {filtered.map((p,i)=>(
+              <div key={i} onClick={()=>{ if(photo){ setPending({name:p.name,brand,type:p.type,hex:p.hex}); } else { savePins([...pins,{name:p.name,brand,type:p.type,hex:p.hex,x:null,y:null}]); } }}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',cursor:'pointer',borderBottom:'1px solid var(--border)'}}>
+                <span style={{width:18,height:18,background:p.hex,border:'1px solid #0006',flexShrink:0}}/>
+                <span style={{flex:1,fontSize:10,color:'var(--text)'}}>{p.name}</span>
+                <span style={{fontSize:8,color:'var(--text3)'}}>{p.type||''}</span>
+              </div>
+            ))}
+            {filtered.length===0&&<div style={{padding:10,fontSize:10,color:'var(--text3)'}}>No paints match.</div>}
+          </div>
+          <div style={{fontSize:8,color:'var(--text3)',marginTop:4}}>
+            {photo?'Pick a paint, then tap the photo where you used it.':'Add a photo to pin paints to exact spots — until then paints are just listed.'}
+          </div>
+        </>)}
+        {rawCapture&&(
+          <StudioPhotoEditor src={rawCapture}
+            onSave={async d=>{ await idbSetPhoto(photoKey,d); setRawCapture(null); setVer(v=>v+1); }}
+            onCancel={()=>setRawCapture(null)}/>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Small square kit-photo thumbnail used across unit lists. Keeps a fixed
@@ -2166,13 +2450,9 @@ const FACTION_ICONS = {
   'GC':'GC','LoV':'LV','QI':'QI','QT':'QT','AoI':'AI',
 };
 
-// Real faction heraldry, cropped from the official icon set — used instead
-// of the plain 2-letter initials wherever a faction is identified. Only
-// covers factions we have a confidently-labelled source icon for; anything
-// else falls back to FACTION_ICONS above rather than guessing at artwork.
-const LOGO_BASE='https://raw.githubusercontent.com/7moud7/The-Strategium/main/WH40K/Images/App/Logos/';
-const FACTION_LOGO_FIDS=new Set(['SM','AS','AdM','AE','AoI','AM','CD','CSM','DG','DRU','GC','GK','NEC','ORK','TAU','TYR']);
-function factionLogoURL(fid){ return FACTION_LOGO_FIDS.has(fid) ? LOGO_BASE+fid+'.png' : null; }
+// Faction heraldry logos retired — the faction picker shows the captured
+// cover banners instead, and everywhere else uses the initials badge.
+function factionLogoURL(fid){ return null; }
 // Drop-in replacement for the plain FACTION_ICONS text badge: shows the
 // real logo image when we have one, and transparently falls back to the
 // initials (both on missing-logo factions and if the image fails to load).
@@ -11091,12 +11371,15 @@ function App(){
       : {img:'menu-40k-table.jpg',vid:'menu-40k-loop.mp4'};
     const MenuArt=(
       <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none'}}>
+        {/* The still is only a poster. Once the video is actually playing it
+            goes fully opaque and the still hides — layering both at partial
+            opacity blended two different frames into a blurry after-image. */}
         <img src={artURL(artSet.img)} alt=""
-          style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',opacity:.65}}
+          style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',opacity:.75}}
           onError={e=>{e.target.style.display='none';}}/>
-        {/* Looping table video layers over the still image when it can load */}
         <video key={artSet.vid} src={artURL(artSet.vid)} autoPlay muted loop playsInline
-          style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.65}}
+          style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:0,transition:'opacity .6s'}}
+          onPlaying={e=>{e.target.style.opacity='1';const img=e.target.parentElement.querySelector('img');if(img)img.style.visibility='hidden';}}
           onError={e=>{e.target.style.display='none';}}/>
         <div style={{position:'absolute',inset:0,background:'linear-gradient(180deg, rgba(7,7,10,.3) 0%, rgba(7,7,10,.55) 55%, rgba(7,7,10,.82) 100%)'}}/>
       </div>
@@ -11377,7 +11660,6 @@ function App(){
               }}>
                 <img className="faction-card-cover" src={factionCoverURL(id)} alt="" loading="lazy"
                   onError={e=>{e.target.style.display='none';}}/>
-                <FactionBadge fid={id} size={32} className="faction-card-icon" style={{fontSize:10}}/>
                 <div style={{flex:1}}>
                   <div className="faction-card-name">{f.name}</div>
                   <div className="faction-card-sub">{f.units} units · {f.detachments} detachments</div>
@@ -11461,6 +11743,7 @@ function App(){
   // ── ARMY ──
   function ArmyScreen(){
     const [showLegend,setShowLegend]=useState(false);
+    const [showExport,setShowExport]=useState(false);
     const [editingName,setEditingName]=useState(false);
     const [draftName,setDraftName]=useState('');
     const [expandTarget,setExpandTarget]=useState(null); // {entryId,field} jump-to-fix from warnings
@@ -11499,10 +11782,32 @@ function App(){
           <button className="btn btn-outline btn-sm" onClick={saveArmyNow} title="Save this Army to your device">
             {savedFlash?'✓ Saved':'💾 Save'}
           </button>
+          <button className="btn btn-outline btn-sm" onClick={()=>setShowExport(true)} title="Export list (GW text / BattleScribe)">⇪</button>
           <button className="btn btn-gold btn-sm" onClick={async()=>{if(!fdata&&active)await loadFaction(active.factionId);setScreen('unit-browser');}}>+ Unit</button>
         </div>
       </div>
       {showLegend&&<RulesLegend onClose={()=>setShowLegend(false)}/>}
+      {showExport&&(
+        <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&setShowExport(false)}>
+          <div className="modal anim-slide-up" style={{maxWidth:420}}>
+            <div className="modal-title" style={{marginBottom:8}}>Export List</div>
+            <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.6,marginBottom:12}}>
+              The text format is the official-app style that New Recruit's "import from text" and tournament
+              organisers accept. The .ros file opens in BattleScribe and New Recruit (units carry names and
+              points — re-link wargear inside those apps after import).
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <button className="btn btn-gold" onClick={()=>{
+                const txt=buildGWListText(active);
+                navigator.clipboard?.writeText(txt).then(()=>alert('List copied to clipboard.')).catch(()=>alert(txt));
+              }}>📋 Copy as Text (GW format)</button>
+              <button className="btn btn-outline" onClick={()=>downloadTextFile(`${active.name.replace(/[^\w\- ]+/g,'')}.txt`,buildGWListText(active))}>⇩ Download .txt</button>
+              <button className="btn btn-outline" onClick={()=>downloadTextFile(`${active.name.replace(/[^\w\- ]+/g,'')}.ros`,buildRosXML(active),'application/xml')}>⇩ Download .ros (BattleScribe / New Recruit)</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setShowExport(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="content">
         {/* Army header */}
         <div className="army-header">
@@ -11860,6 +12165,7 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
 
   function CollectionScreen(){
     const [colTab,setColTab]       = useState('owned');
+    const [modelDetail,setModelDetail]=useState(null); // {unitKey,unitName,modelIdx,displayName}
     const [addFaction,setAddFaction]  = useState(null);  // fid being browsed
     const [searchQ,setSearchQ]     = useState('');
     const [expandedUnit,setExpandedUnit] = useState(null); // unitId with model details open
@@ -12019,6 +12325,18 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
         [unitId]:{
           ...c[unitId],
           modelStatus:{...(c[unitId].modelStatus||{}), [modelIdx]:status}
+        }
+      }));
+    }
+
+    // Custom per-model names live separately from the generated slot labels
+    // so box add/remove (which regenerates modelNames) never wipes them.
+    function setModelName(unitId, modelIdx, name){
+      setCollection(c=>({
+        ...c,
+        [unitId]:{
+          ...c[unitId],
+          modelCustomNames:{...(c[unitId].modelCustomNames||{}), [modelIdx]:name||undefined}
         }
       }));
     }
@@ -12238,6 +12556,8 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                               </div>
                               {/* Box controls */}
                               <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                                <button className="counter-btn" title="Add to wishlist" style={{width:24,height:24,color:wishlist.find(w=>w.id===unit.id)?'var(--gold)':'var(--text3)'}}
+                                  onClick={()=>{addToWishlistWithCount(unit.id,unit.name,unit.factionId||fid,unit.factionName||fname,1);}}>★</button>
                                 <button className="counter-btn" style={{width:24,height:24}}
                                   onClick={()=>removeBox(unit.id, collFactionData?.units?.find(u=>u.id===unit.id))}>−</button>
                                 <span style={{fontSize:13,fontWeight:700,color:'var(--gold)',minWidth:16,textAlign:'center'}}>{unit.boxes}</span>
@@ -12291,11 +12611,15 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                                   {slots.map((name,mi)=>{
                                     const status = statuses[mi] || 'unpainted';
                                     const color = PAINT_COLOR[status];
+                                    const customName=(unit.modelCustomNames||{})[mi];
+                                    const paintCount=getModelPaintLog(`${unit.id}:${mi}`).length;
                                     return(
                                       <div key={mi} style={{background:'var(--bg2)', border:`1px solid ${color}40`, borderLeft:`3px solid ${color}`, padding:'5px 6px'}}>
-                                        <div style={{fontSize:8,color:'var(--text3)',marginBottom:4,letterSpacing:.3,
+                                        <div onClick={()=>setModelDetail({unitKey:unit.id,unitName:unit.name,modelIdx:mi,displayName:customName||''})}
+                                          title="Name, photo & paint log"
+                                          style={{fontSize:8,color:customName?'var(--gold)':'var(--text3)',marginBottom:4,letterSpacing:.3,cursor:'pointer',
                                           overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                                          {name}
+                                          ✎ {customName||name}{paintCount>0?` · 🎨${paintCount}`:''}
                                         </div>
                                         <div style={{display:'flex',gap:2}}>
                                           {[['unpainted','Bare'],['started','Part'],['painted','Done']].map(([st,label])=>(
@@ -12368,6 +12692,8 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                           </div>
                         </div>
                         <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+                          <button className="counter-btn" title="Add to wishlist" style={{width:26,height:26,color:wishlist.find(w=>w.id===u.id)?'var(--gold)':'var(--text3)'}}
+                            onClick={()=>addToWishlistWithCount(u.id, u.name, addFaction, index?.[addFaction]?.name||addFaction, 1)}>★</button>
                           <button className="counter-btn" style={{width:26,height:26}}
                             onClick={()=>removeBox(u.id, u)}>−</button>
                           <span style={{fontSize:13,fontWeight:700,color:'var(--gold)',minWidth:20,textAlign:'center'}}>
@@ -12461,10 +12787,14 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
           {/* ── WISHLIST TAB ───────────────────────────────────────────────── */}
           {colTab==='wishlist'&&(
             <div style={{padding:10}}>
+              <button className="btn btn-gold" style={{width:'100%',marginBottom:10}}
+                onClick={()=>{setColTab('owned');setAddFaction('select');}}>
+                + Add Units to Wishlist (★ in the unit browser)
+              </button>
               {wishlist.length===0&&(
                 <div className="empty">
                   <div style={{fontFamily:"'Cinzel',serif"}}>Wishlist Empty</div>
-                  <div style={{fontSize:10}}>Add units from the Meta tab or the unit browser</div>
+                  <div style={{fontSize:10}}>Tap ★ next to any unit in the browser or collection</div>
                 </div>
               )}
               {Object.entries(wishByFaction).map(([fid,{name:fname,items}])=>(
@@ -12489,6 +12819,13 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                 </div>
               ))}
             </div>
+          )}
+
+          {modelDetail&&(
+            <ModelDetailModal unitKey={modelDetail.unitKey} unitName={modelDetail.unitName}
+              modelIdx={modelDetail.modelIdx} displayName={modelDetail.displayName}
+              onRename={n=>{setModelName(modelDetail.unitKey,modelDetail.modelIdx,n);setModelDetail(null);}}
+              onClose={()=>setModelDetail(null)}/>
           )}
 
           {/* ── META TAB ───────────────────────────────────────────────────── */}
