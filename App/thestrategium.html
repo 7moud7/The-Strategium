@@ -217,12 +217,14 @@ input::placeholder{color:var(--text3)}
 
 /* ── FACTION CARD ── */
 .faction-list{display:flex;flex-direction:column;gap:6px}
-.faction-card-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;opacity:.5;pointer-events:none;mask-image:linear-gradient(to right,rgba(0,0,0,.55) 0%,black 55%);-webkit-mask-image:linear-gradient(to right,rgba(0,0,0,.55) 0%,black 55%)}
+.faction-card-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%;opacity:.72;pointer-events:none;mask-image:linear-gradient(to right,rgba(0,0,0,.45) 0%,black 55%);-webkit-mask-image:linear-gradient(to right,rgba(0,0,0,.45) 0%,black 55%)}
 .faction-card>*:not(.faction-card-cover){position:relative;z-index:1}
 .faction-card{
   background:var(--bg1);border:1px solid var(--border);
-  padding:14px 16px;cursor:pointer;min-height:72px;
-  display:flex;align-items:center;gap:14px;
+  /* 72px showed only a thin horizontal sliver of the cover art — the card is
+     the faction's visual, so give it room to actually read as one. */
+  padding:14px 16px;cursor:pointer;min-height:150px;
+  display:flex;align-items:flex-end;gap:14px;
   transition:border-color .2s,background .2s;
   position:relative;overflow:hidden;
 }
@@ -482,6 +484,12 @@ input::placeholder{color:var(--text3)}
 }
 .btn-settings-float:hover{background:var(--golddim);border-color:var(--gold);transform:scale(1.06) rotate(20deg);}
 .btn-settings-float:active{transform:scale(.92);}
+/* The gear is position:fixed and sits outside the topbar, so topbar content
+   (which flexes to the right edge) used to slide underneath it — "+ Army" and
+   the war-mode phase controls were both half-covered. Reserve its footprint
+   (34px button + 10px offset + gap) but only on screens that actually render
+   it, so screens without a gear keep their normal right padding. */
+body:has(.btn-settings-float) .topbar{padding-right:52px}
 /* Commander tab — was visually identical to the other tabs; the Commander
    is a headline feature, so give it a standing gold pill instead of a
    plain text tab. */
@@ -4598,7 +4606,7 @@ function ArmyUnitRow({entry,onRemove,onWarlord,isWarlord,allEntries,onSaveWargea
   return(
     <div className={`unit-card ${isWarlord?'warlord':''} ${leaderEntry?'attached':''}`}>
       <div className="unit-card-header" onClick={()=>{if(!editingName)setExp(o=>!o);}}>
-        <UnitThumb fid={factionId} uid={u.id} size={44}/>
+        <UnitThumb fid={factionId} uid={u.id} size={64}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
             {editingName?(
@@ -8689,7 +8697,9 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       {/* ── BATTLE HEADER ── */}
       <div style={{background:'var(--bg0)',borderBottom:'1px solid var(--goldborder)',flexShrink:0}}>
         {/* Active player banner */}
-        <div style={{background:'var(--golddim)',borderBottom:'1px solid var(--goldborder)',padding:'5px 10px 5px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+        {/* Right padding clears the fixed settings gear (34px at right:10) —
+            without it the gear sits on top of the pause button. */}
+        <div style={{background:'var(--golddim)',borderBottom:'1px solid var(--goldborder)',padding:'5px 52px 5px 14px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
           <div style={{fontFamily:"'Cinzel',serif",fontSize:11,fontWeight:700,color:'var(--gold)',letterSpacing:1}}>
             {activePlayer===1?p1Label:p2Label}'s Turn
           </div>
@@ -10885,7 +10895,7 @@ function App(){
 
     // ── SYSTEM SELECT ──
     if(path.length===0) return(
-      <div className="menu-root" style={{position:'relative'}}>
+      <div className="menu-root">
         {MenuArt}
         <div className="menu-hex-grid"/>
         <div className="menu-center" style={{maxWidth:420}}>
@@ -10925,7 +10935,7 @@ function App(){
 
     // ── EDITION SELECT ──
     if(path[0]==='w40k'&&path.length===1) return(
-      <div className="menu-root" style={{position:'relative'}}>
+      <div className="menu-root">
         {MenuArt}
         <div className="menu-hex-grid"/>
         <div className="menu-center" style={{maxWidth:420}}>
@@ -10957,7 +10967,7 @@ function App(){
 
     // ── AOS: EDITION SELECT ──
     if(path[0]==='aos'&&path.length===1) return(
-      <div className="menu-root" style={{position:'relative'}}>
+      <div className="menu-root">
         {MenuArt}
         <div className="menu-hex-grid"/>
         <div className="menu-center" style={{maxWidth:420}}>
@@ -10984,7 +10994,7 @@ function App(){
 
     // ── AOS: MAIN PILLARS ──
     if(path[0]==='aos') return(
-      <div className="menu-root" style={{position:'relative'}}>
+      <div className="menu-root">
         {MenuArt}
         <div className="menu-hex-grid"/>
         <div className="menu-center" style={{maxWidth:460}}>
@@ -11014,7 +11024,7 @@ function App(){
 
     // ── MAIN PILLARS ──
     return(
-      <div className="menu-root" style={{position:'relative'}}>
+      <div className="menu-root">
         {MenuArt}
         <div className="menu-hex-grid"/>
         <div className="menu-center" style={{maxWidth:460}}>
@@ -11503,7 +11513,7 @@ function App(){
           // Flat list when searching/filtering
           filtered.map(unit=>(
             <div key={unit.id} className="browser-unit-card">
-              <UnitThumb fid={active?.factionId} uid={unit.id} size={40}/>
+              <UnitThumb fid={active?.factionId} uid={unit.id} size={72}/>
               <div className="browser-unit-info" onClick={()=>setSelUnit(unit)} style={{flex:1,cursor:'pointer'}}>
                 <div className="browser-unit-name">{unit.name}</div>
                 <div className="browser-unit-meta">
@@ -11536,7 +11546,7 @@ function App(){
                 </div>
                 {open&&units.map(unit=>(
                   <div key={unit.id} className="browser-unit-card">
-                    <UnitThumb fid={active?.factionId} uid={unit.id} size={40}/>
+                    <UnitThumb fid={active?.factionId} uid={unit.id} size={72}/>
                     <div className="browser-unit-info" onClick={()=>setSelUnit(unit)} style={{flex:1,cursor:'pointer'}}>
                       <div className="browser-unit-name">{unit.name}</div>
                       <div className="browser-unit-meta">
@@ -11678,6 +11688,46 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
     // from turning into a wall of units. Expanded by default.
     const [collapsedFactions,setCollapsedFactions] = useState({});
 
+  // ── Role lookup for the Owned tab ────────────────────────────────────────
+  // Collection entries only store name/boxes/paint state — never the unit's
+  // battlefield role — and older entries predate this grouping entirely. So
+  // resolve roles from each faction's unit data and cache them by unit id.
+  // loadFaction() is deliberately NOT used: it writes the shared `fdata`
+  // state that the add-a-faction browser owns, and the Owned tab spans
+  // several factions at once.
+  const collFids=useMemo(()=>[...new Set(
+    Object.values(collection||{}).map(u=>u.factionId).filter(Boolean)
+  )].sort().join(','),[collection]);
+  const [unitRoles,setUnitRoles]=useState({});
+  React.useEffect(()=>{
+    if(!collFids) return;
+    let cancelled=false;
+    (async()=>{
+      const map={};
+      for(const fid of collFids.split(',')){
+        try{
+          const file=(index&&index[fid]?.file)||fid.toLowerCase()+'.json';
+          const d=await fetchJSON(file);
+          for(const u of (d?.units||[])) if(u.id!=null) map[String(u.id)]=u.role;
+        }catch(e){ /* faction data unavailable — those units fall back to Other */ }
+      }
+      if(!cancelled) setUnitRoles(map);
+    })();
+    return()=>{cancelled=true};
+  },[collFids,index]);
+  // Same normalisation the army builder uses, so both screens group alike.
+  const COLL_ROLE_MAP={'Character':'Characters','Characters':'Characters','Battleline':'Battleline',
+    'Dedicated Transport':'Dedicated Transports','Dedicated Transports':'Dedicated Transports',
+    'Allied':'Allied Units','Allied Units':'Allied Units'};
+  function collRole(unit){
+    const raw=unit.role||unitRoles[String(unit.id)];
+    return COLL_ROLE_MAP[raw]||raw||'Other';
+  }
+  function collRoleRank(unit){
+    const i=ROLE_ORDER.indexOf(collRole(unit));
+    return i===-1?98:i;
+  }
+
     // ── Box-set helpers ──────────────────────────────────────────────────────
     // Models per box, in priority order:
     //  1. manual per-unit override saved in the collection (always wins)
@@ -11768,6 +11818,7 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
           const slots = getModelSlots(unit, 1, boxSize);
           return {...c, [unitId]:{
             name: unit.name, factionId, factionName,
+            role: unit.role||null,  // stored so the Owned tab groups without a lookup
             boxes: 1, boxSize,
             modelNames: slots,
             modelStatus: {},  // {idx: 'painted'|'started'|'unpainted'}
@@ -12019,7 +12070,9 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                         <span style={{flex:1}}>{fname}</span>
                         <span style={{color:'var(--text3)',letterSpacing:.5}}>{units.length} unit{units.length!==1?'s':''} · {nPaintedFaction}/{nModelsFaction} painted</span>
                       </div>
-                      {!collapsed&&units.map(unit=>{
+                      {!collapsed&&[...units].sort((a,b)=>collRoleRank(a)-collRoleRank(b)||String(a.name||'').localeCompare(String(b.name||''))).map((unit,ui,sorted)=>{
+                    const uRole=collRole(unit);
+                    const showRoleHeader=ui===0||collRole(sorted[ui-1])!==uRole;
                         const slots = unit.modelNames || [];
                         const nModels = slots.length;
                         const statuses = unit.modelStatus || {};
@@ -12032,7 +12085,15 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                         const borderColor = allDone?PAINT_COLOR.painted : nPainted>0||nStarted>0?PAINT_COLOR.started : PAINT_COLOR.unpainted;
 
                         return(
-                          <div key={unit.id} style={{marginBottom:6,border:'1px solid var(--border)',borderLeft:`3px solid ${borderColor}`,background:'var(--bg1)'}}>
+                        <React.Fragment key={unit.id}>
+                          {showRoleHeader&&(
+                            <div className="role-group" data-role={uRole.replace(/\s+/g,'-')} style={{marginTop:ui===0?2:12}}>
+                              <div className="role-group-header">
+                                <span className="role-group-title">{uRole}</span>
+                              </div>
+                            </div>
+                          )}
+                          <div style={{marginBottom:6,border:'1px solid var(--border)',borderLeft:`3px solid ${borderColor}`,background:'var(--bg1)'}}>
                             {/* Unit header row */}
                             <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px'}}>
                               <UnitThumb fid={fid} uid={unit.id} size={40} hideIfEmpty/>
@@ -12141,6 +12202,7 @@ function MetaListCard({list, li, collection, selectedMeta, addToWishlistWithCoun
                               </div>
                             )}
                           </div>
+                        </React.Fragment>
                         );
                       })}
                     </div>
