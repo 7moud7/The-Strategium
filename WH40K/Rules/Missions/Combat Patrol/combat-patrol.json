@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "source": "Warhammer 40,000 Combat Patrol rules (official free download, warhammer-community.com)",
+    "sourceUrl": "https://assets.warhammer-community.com/warhammer40000_combatpatrol_rules_eng.24.09-rbtns7zwbh.pdf",
+    "edition": 10,
+    "description": "Combat Patrol — the fastest way to play: one boxed patrol per side, bespoke self-contained rules, ~1 hour games"
+  },
+
+  "modeRules": {
+    "battlefield": "44\" x 30\"",
+    "battleLength": "4 battle rounds",
+    "gameLength": "About one hour",
+    "armies": "Each player uses exactly one Combat Patrol (the contents of one Combat Patrol boxed set). No points — every patrol is pre-balanced against every other patrol."
+  },
+
+  "armyConstruction": {
+    "roster": "Fixed: the units in your Combat Patrol box, using the bespoke Combat Patrol datasheets (NOT the matched play datasheets — stats and abilities are adjusted for this mode)",
+    "warlord": "Each Combat Patrol has a set Warlord",
+    "enhancements": "Choose 1 of the 2 bespoke Enhancements published for your patrol; only the Warlord can take it",
+    "factionRules": "Each patrol has its own self-contained faction rule, replacing the codex army rule"
+  },
+
+  "stratagems": {
+    "note": "Each Combat Patrol has exactly 3 bespoke Stratagems (one designed to be reactive). Core stratagems are not used in this mode.",
+    "cpGain": "1 CP per player at the start of each battle round"
+  },
+
+  "missions": {
+    "structure": "Combat Patrol mission cards: deployment map + mission rule + primary objective, drawn or chosen per game",
+    "scoring": "Victory points scored in battle rounds 2, 3 and 4 based on objective control and mission conditions",
+    "secondaries": "Each patrol has its own bespoke secondary objectives, flavoured to its narrative"
+  },
+
+  "sequence": [
+    "Choose Combat Patrols",
+    "Determine mission (deployment + mission rule + primary)",
+    "Create the battlefield",
+    "Choose Enhancement (1 of 2, Warlord only)",
+    "Determine Attacker and Defender",
+    "Deploy armies",
+    "Determine first turn",
+    "Play 4 battle rounds",
+    "Determine victor (most VP)"
+  ],
+
+  "notes": [
+    "All Combat Patrol rules (datasheets, faction rule, enhancements, stratagems, secondaries) are published free per faction on warhammer-community.com downloads",
+    "Balanced independently of matched play — dataslate changes do not automatically apply here"
+  ]
+}

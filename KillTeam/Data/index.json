@@ -1,0 +1,17 @@
+{
+    "kommando":  {
+                     "name":  "Kommando",
+                     "file":  "kommando.json",
+                     "units":  12
+                 },
+    "angels-of-death":  {
+                            "name":  "Angels of Death",
+                            "file":  "angels-of-death.json",
+                            "units":  9
+                        },
+    "kommandos":  {
+                      "name":  "Kommandos",
+                      "file":  "kommandos.json",
+                      "units":  11
+                  }
+}

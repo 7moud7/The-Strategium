@@ -1,0 +1,479 @@
+{
+    "id":  "kommando",
+    "name":  "Kommando",
+    "source":  "BSData/wh40k-killteam",
+    "revision":  "bee230c460a1",
+    "battleTraits":  [
+
+                     ],
+    "units":  [
+                  {
+                      "id":  "8425-4dd8-3cb1-90fc",
+                      "name":  "Grot",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "5"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Kommando Grot"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⚔ Grot choppa",
+                                          "type":  "Weapons",
+                                          "A":  "3",
+                                          "WS/BS":  "5+",
+                                          "D":  "1/4",
+                                          "SR":  "-",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Sneaky Zogger",
+                                            "type":  "Abilities",
+                                            "Ability":  "This operative cannot have an Engage order. In addition, this operative is always treated as having a Conceal order, regardless of any other rules (e.g. Vantage Point)."
+                                        }
+                                    ],
+                      "points":  null,
+                      "profiles":  [
+                                       {
+                                           "name":  "Grappling Hook (1AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "Select a point on a terrain feature that is Visible to this operative (treat that point as an intended target). Perform a free Normal Move action with this operative, moving in a single straight line with an unlimited Movement as though it can FLY. It must finish that move within ▲ of that point.\r\n\r\n\r\nThis operative cannot perform the Operate Hatch action during this action."
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "0847-16ff-c2cd-2c64",
+                      "name":  "Nob w/ big choppa",
+                      "stats":  null,
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Kommando Nob",
+                                       "Leader"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⚔ Big choppa",
+                                          "type":  "Weapons",
+                                          "A":  "4",
+                                          "WS/BS":  "2+",
+                                          "D":  "5/6",
+                                          "SR":  "-",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "94ab-c60d-d426-0fdf",
+                      "name":  "Dakka Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Dakka Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Dakka shoota",
+                                          "type":  "Weapons",
+                                          "A":  "5",
+                                          "WS/BS":  "4+",
+                                          "D":  "3/4",
+                                          "SR":  "Unload Slugs*",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "*Unload Slugs",
+                                            "type":  "Abilities",
+                                            "Ability":  "Each time this operative makes a shooting attack with this weapon, in the Roll Attack Dice step of that shooting attack, if the target is within ⬟ of it, you can re-roll any or all of your attack dice."
+                                        }
+                                    ],
+                      "points":  null,
+                      "profiles":  [
+                                       {
+                                           "name":  "Dakka Dash (1AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "Perform a free Shoot action and free Dash action with this operative in any order. You can only select a dakka shoota for this action’s shooting attack."
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "c7da-483a-3f7e-8dd5",
+                      "name":  "Snipa Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Snipa Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Scoped big shoota",
+                                          "type":  "Weapons",
+                                          "A":  "6",
+                                          "WS/BS":  "3+",
+                                          "D":  "2/2",
+                                          "SR":  "-",
+                                          "!":  "MW2"
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null,
+                      "profiles":  [
+                                       {
+                                           "name":  "\u0027Av it! (2AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "Perform a free Shoot action with this operative using its scoped big shoota. After making the shooting attack against the target, this operative can make a shooting attack against each other valid target within ⬤ of the original target. Each time this operative makes a shooting attack for this action, subtract 2 from the Attacks characteristic of its scoped big shoota for that shooting attack."
+                                                     }
+                                       },
+                                       {
+                                           "name":  "Da Best Spot (2AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "Perform a free Shoot action with this operative using its scoped big shoota, even if it has a Conceal order."
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "1ea0-bc33-96e9-29d3",
+                      "name":  "Nob w/ power klaw",
+                      "stats":  null,
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Kommando Nob",
+                                       "Leader"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⚔ Power klaw",
+                                          "type":  "Weapons",
+                                          "A":  "4",
+                                          "WS/BS":  "3+",
+                                          "D":  "5/7",
+                                          "SR":  "Brutal",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "cb2d-d9d4-fb6f-87d3",
+                      "name":  "Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Kommando Boy"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "0b3c-3ead-0178-0609",
+                      "name":  "Slasha Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Slasha Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "Throwing knives",
+                                          "type":  "Weapons",
+                                          "A":  "4",
+                                          "WS/BS":  "3+",
+                                          "D":  "2/5",
+                                          "SR":  "Rng ⬟, Silent",
+                                          "!":  ""
+                                      },
+                                      {
+                                          "name":  "Twin choppas",
+                                          "type":  "Weapons",
+                                          "A":  "4",
+                                          "WS/BS":  "3+",
+                                          "D":  "4/5",
+                                          "SR":  "Relentless",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Dat All You Got?",
+                                            "type":  "Abilities",
+                                            "Ability":  "Each time after this operative fights in combat, if it lost any wounds in that combat but was not incapacitated, you can roll one D6: on a 4+, the enemy operative that fought it in that combat suffers 2 mortal wounds."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "277f-a5f5-d3c6-ab2e",
+                      "name":  "Breacha Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Breacha Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⚔ Breacha ram",
+                                          "type":  "Weapons",
+                                          "A":  "3",
+                                          "WS/BS":  "3+",
+                                          "D":  "5/5",
+                                          "SR":  "Brutal",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Bull Charge",
+                                            "type":  "Abilities",
+                                            "Ability":  "Each time this operative fights in combat, if it made a charge move during that activation, its breacha ram gains the Stun critical hit rule for that combat."
+                                        },
+                                        {
+                                            "name":  "Breach",
+                                            "type":  "Abilities",
+                                            "Ability":  "Each time this operative performs a Normal Move, Dash or Charge action, it can move through parts of terrain features that are no more than ▲ thick as if they were not there."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "3ba5-0660-edb1-d020",
+                      "name":  "Comms Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Comms Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Shokka pistol",
+                                          "type":  "Weapons",
+                                          "A":  "6",
+                                          "WS/BS":  "4+",
+                                          "D":  "1/1",
+                                          "SR":  "Rng ⬟",
+                                          "!":  "Stun, MW2"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "I Got a Plan, Ladz",
+                                            "type":  "Abilities",
+                                            "Ability":  "Once per Turning Point, during this operative\u0027s activation, it can perform a mission or Pick Up action for one less AP (to a minimum of 0AP)."
+                                        }
+                                    ],
+                      "points":  null,
+                      "profiles":  [
+                                       {
+                                           "name":  "Listen In (1AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "Select one friendly KOMMANDO operative within ⬟ of and Visible to this operative. Add 1 to its APL. This operative cannot perform this action if it is within Engagement Range of an enemy operative."
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "c18b-b7df-3025-434b",
+                      "name":  "Burna Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Burna Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Burna",
+                                          "type":  "Weapons",
+                                          "A":  "5",
+                                          "WS/BS":  "2+",
+                                          "D":  "2/2",
+                                          "SR":  "Rng ⬟, Torrent ⬤",
+                                          "!":  ""
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "f67f-2de3-daef-1fbf",
+                      "name":  "Rokkit Boy",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "5+",
+                                    "W":  "10"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Rokkit Boy"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Rokkit launcha",
+                                          "type":  "Weapons",
+                                          "A":  "5",
+                                          "WS/BS":  "4+",
+                                          "D":  "4/5",
+                                          "SR":  "AP1",
+                                          "!":  "Splash 1"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Boom Boy",
+                                            "type":  "Abilities",
+                                            "Ability":  "Each time this operative performs a Shoot action during its activation, in the Roll Attack Dice step of that action\u0027s shooting attack, if it has not moved during that activation, you can re-roll any or all of your attack dice."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "254b-70c4-40f8-0556",
+                      "name":  "Bomb Squig",
+                      "stats":  {
+                                    "M":  "3⬤",
+                                    "APL":  "2",
+                                    "GA":  "1",
+                                    "DF":  "3",
+                                    "SV":  "6+",
+                                    "W":  "6"
+                                },
+                      "keywords":  [
+                                       "KOMMANDO",
+                                       "Ork",
+                                       "Bomb Squig"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Dynamite",
+                                          "type":  "Weapons",
+                                          "A":  "4",
+                                          "WS/BS":  "3+",
+                                          "D":  "5/6",
+                                          "SR":  "AP1, Bomb Squig*",
+                                          "!":  "P2"
+                                      },
+                                      {
+                                          "name":  "⚔ Vicious Bite",
+                                          "type":  "Weapons",
+                                          "A":  "3",
+                                          "WS/BS":  "4+",
+                                          "D":  "4/5",
+                                          "SR":  "-",
+                                          "!":  "-"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "BOOM!",
+                                            "type":  "Abilities",
+                                            "Ability":  "If this operative is incapacitated, roll one D6: on a 3+, it makes a shooting attack using its dynamite."
+                                        },
+                                        {
+                                            "name":  "Stoopid",
+                                            "type":  "Abilities",
+                                            "Ability":  "This operative cannot perform mission actions, cannot perform the Pick Up action and cannot have a Conceal order. It cannot be equipped with equipment. In narrative play, it cannot gain (or lose) experience and automatically passes Casualty tests. This operative\u0027s APL characteristic cannot be positively modified."
+                                        },
+                                        {
+                                            "name":  "*Bomb Squig",
+                                            "type":  "Abilities",
+                                            "Ability":  "This operative can perform a Shoot action with this weapon if it is within Engagement Range of an enemy operative. When this operative performs a Shoot action and selects this ranged weapon, make a shooting attack against each other operative within its Engagement Range (even if it has friendly operatives within its Engagement Range) with this weapon - each of them is a valid target and cannot be in Cover. After all of those shooting attacks have been made, this operative is incapacitated and does not roll for its BOOM! ability. This operative cannot make a shooting attack with this weapon by performing an Overwatch action."
+                                        }
+                                    ],
+                      "points":  null
+                  }
+              ]
+}

@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "source": "Warhammer Age of Sigmar 4th Edition Core Rules (official free download, warhammer-community.com)",
+    "edition": 4,
+    "description": "Structured AoS 4th core rules for the battle engine — turn sequence, commands, core mechanics"
+  },
+
+  "battleRound": {
+    "priority": "At the start of each battle round both players roll off (priority roll). The winner chooses who takes the first turn. A tie: whoever went second last round chooses (round 1: the player who finished deploying first chooses).",
+    "commandPoints": "Each player receives 4 CP at the start of the battle round. Unspent CP are lost at the end of the round.",
+    "turnSequence": ["Start of Turn", "Hero Phase", "Movement Phase", "Shooting Phase", "Charge Phase", "Combat Phase", "End of Turn"],
+    "combatPhaseNote": "In the Combat phase players alternate picking units to fight, starting with the active player. Units that charged do not automatically strike first — abilities grant Strike-first."
+  },
+
+  "phases": {
+    "hero": "Use Hero-phase abilities: casting spells (WIZARD), chanting prayers (PRIEST), Rally command, faction hero-phase abilities. Both players have hero-phase windows — the active player resolves first.",
+    "movement": "Units can Move (up to Move characteristic), Run (+D6\", cannot shoot or charge later that turn unless an ability allows it), or Retreat (leave combat — the unit suffers D3 mortal damage and cannot shoot or charge that turn). Flying models ignore terrain and other models while moving.",
+    "shooting": "Units with ranged weapons can shoot if eligible: not having Run or Retreated this turn. Units in combat can only shoot at enemy units in combat with them (Shoot in Combat weapons excepted).",
+    "charge": "A unit can charge if it is not in combat, did not Run or Retreat this turn, and is within 12\" of an enemy. Charge roll is 2D6\"; the move must end within 1/2\" of an enemy unit.",
+    "combat": "Alternating activations starting with the active player. A unit fights if it is in combat (within 3\" combat range) or charged this turn. When activated: pile in up to 3\", then attack with melee weapons.",
+    "end": "Score end-of-turn objectives, resolve expiring abilities, tidy state."
+  },
+
+  "commands": [
+    {"name": "Rally", "cost": 1, "timing": "Your Hero phase", "effect": "Pick a friendly unit not in combat. Roll 6 dice: each 4+ is a rally point. Spend rally points to heal wounds or return slain models to the unit.", "category": "recovery"},
+    {"name": "At the Double", "cost": 1, "timing": "Your Movement phase (when a unit Runs)", "effect": "The unit's Run roll is treated as 6 instead of rolling.", "category": "movement"},
+    {"name": "Forward to Victory", "cost": 1, "timing": "Your Charge phase (when a unit declares a charge)", "effect": "Re-roll the charge roll.", "category": "charge"},
+    {"name": "All-out Attack", "cost": 1, "timing": "Reaction: when you declare an Attack ability", "effect": "Add 1 to hit rolls for the attacking unit's attacks this phase.", "category": "attack-reaction"},
+    {"name": "All-out Defence", "cost": 1, "timing": "Reaction: when your unit is targeted by an Attack ability", "effect": "Add 1 to save rolls for the target unit this phase.", "category": "defence-reaction"},
+    {"name": "Redeploy", "cost": 1, "timing": "Reaction: end of enemy Movement phase", "effect": "Pick a friendly unit not in combat: it can move up to D6\" (cannot end the move in combat).", "category": "reaction"},
+    {"name": "Covering Fire", "cost": 1, "timing": "Reaction: end of enemy Movement phase", "effect": "Pick a friendly unit with ranged weapons: it shoots, but subtract 1 from its hit rolls.", "category": "reaction"},
+    {"name": "Counter-charge", "cost": 1, "timing": "Reaction: end of enemy Charge phase", "effect": "Pick a friendly unit: it can attempt a charge as if it were your Charge phase.", "category": "reaction"},
+    {"name": "Magical Intervention", "cost": 1, "timing": "Reaction: end of enemy Hero phase", "effect": "Pick a friendly WIZARD or PRIEST: it can use one spell or prayer as if it were your Hero phase (harder to cast — apply the penalty from the core rules).", "category": "reaction"},
+    {"name": "Power Through", "cost": 1, "timing": "Your Combat phase", "effect": "After a unit with a higher Health characteristic than an enemy unit in combat with it fights, it can inflict mortal damage on that unit and then move through it.", "category": "combat"}
+  ],
+  "commandLimits": "Each command can only be used once per phase, and a unit can only be affected by one command per phase.",
+
+  "coreMechanics": {
+    "attacks": "Attack sequence: Hit roll (vs Hit characteristic) → Wound roll (vs Wound characteristic) → opponent Saves (modified by Rend) → Damage. Unmodified 6 to hit is a Critical Hit — weapon abilities like Crit (2 Hits), Crit (Auto-wound) and Crit (Mortal) trigger on it.",
+    "wards": "Ward saves: roll a dice per point of damage; on a success the damage is ignored. Wards cap at 3+ effectiveness by rule interactions; a unit uses only its best ward.",
+    "mortalDamage": "Mortal damage bypasses hit/wound/save sequences entirely (wards still apply).",
+    "strikeOrder": "Strike-first and Strike-last modify activation order in the Combat phase: all Strike-first units fight before normal units; Strike-last units fight after everything else. If both apply they cancel out.",
+    "objectives": "Objectives are controlled by comparing total Control characteristics of models within 3\" (contesting range). Control is sticky in some battlepacks — check the active battlepack.",
+    "combatRange": "A unit is in combat while within 3\" of an enemy unit. Pile-in moves are up to 3\" and must end no further from the nearest enemy.",
+    "battleshock": "There is no battleshock phase in 4th edition — attrition is handled through control scores and abilities.",
+    "terrain": "Terrain features grant Cover (+1 to save against shooting for units wholly behind/on them, not if they charged) and may be Impassable, Obscuring or have faction terrain rules.",
+    "magic": "Casting: 2D6 vs the spell's casting value; enemy WIZARDS within range may unbind. Manifestations (endless spells and invocations) are summoned units controlled by abilities — they act in a dedicated step and can be banished.",
+    "unitCoherency": "Models in a unit must remain in coherency: within 1\" horizontally of another model in the unit (2 models for units of 7+). Models out of coherency at the end of a turn are removed."
+  },
+
+  "armyConstruction": {
+    "points": "Matched play: 2000 pts standard (Battlepack: General's Handbook). Armies pick one faction, one battle formation, heroic traits, artefacts of power and spell/prayer/manifestation lores per the battlepack limits.",
+    "regiments": "Armies are organised into regiments, each led by a HERO; the number of regiments and companion rules follow the battlepack.",
+    "generalsHandbook": "Season rules (battle tactics, objectives, restrictions) come from the current General's Handbook battlepack."
+  },
+
+  "notes": [
+    "This document is the engine summary; the verbatim rules are the free official PDF on warhammer-community.com",
+    "Spearhead (boxed small-format mode, the AoS equivalent of Combat Patrol) has its own bespoke rules per box — not yet ingested",
+    "Faction battle traits, formations and unit rules are data: AoS/Data/*.json → Supabase aos-4e"
+  ]
+}

@@ -1,0 +1,355 @@
+{
+    "id":  "angels-of-death",
+    "name":  "Angels of Death",
+    "source":  "BSData/wh40k-killteam",
+    "revision":  "bee230c460a1",
+    "battleTraits":  [
+
+                     ],
+    "units":  [
+                  {
+                      "id":  "1e8f-a57f-d418-402d",
+                      "name":  "Space Marine Captain",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "15"
+                                },
+                      "keywords":  [
+                                       "ANGEL OF DEATH",
+                                       "Leader",
+                                       "Imperium",
+                                       "Space Marine Captain",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Heroic Leader",
+                                            "type":  "Abilities",
+                                            "Ability":  "Once per turning point, you can do one of the following:\n- Use a firefight ploy for 0CP if this is the specified ANGEL OF DEATH operative (excluding Command Re-roll).\n- Use the Combat Doctrine strategy ploy when you activate a friendly ANGEL OF DEATH operative if this operative is in the killzone and isn’t within control range of enemy operatives (pay its CP cost as normal). Note that you cannot do so if you’ve already used that ploy during this turning point.\n- Use the Adjust Doctrine firefight ploy for 0CP if this operative is in the killzone and not within control range of enemy operatives."
+                                        },
+                                        {
+                                            "name":  "Iron Halo",
+                                            "type":  "Abilities",
+                                            "Ability":  "Once per battle, when an attack dice inflicts Normal Dmg on this operative, you can ignore that inflicted damage."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "c809-3374-c7f7-facd",
+                      "name":  "Assault Intercessor Sergeant",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "15"
+                                },
+                      "keywords":  [
+                                       "Leader",
+                                       "Imperium",
+                                       "ANGEL OF DEATH",
+                                       "Assault Intercessor",
+                                       "Sergeant",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Hand Flamer",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "2+",
+                                          "DMG":  "3/3",
+                                          "WR":  "Range 6\", Saturate, Torrent 1\""
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Doctrine Warfare",
+                                            "type":  "Abilities",
+                                            "Ability":  "You can do each of the following once per battle:\n- Whenever you would use the Combat Doctrine strategy ploy and then select Devastator, if this operative is in the killzone, it costs you 0CP.\n- Whenever you would use the Combat Doctrine strategy ploy and then select Tactical, if this operative is in the killzone, it costs you 0CP."
+                                        },
+                                        {
+                                            "name":  "Chapter Veteran",
+                                            "type":  "Abilities",
+                                            "Ability":  "At the end of the Select Operatives step, if this operative is selected for deployment, select one additional **CHAPTER TACTIC** for it to have for the battle. Unlike primary and secondary **CHAPTER TACTICS**, you don’t have to select the same one for each battle in a campaign or tournament."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "3b04-997f-5370-c1f2",
+                      "name":  "Intercessor Sergeant",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "15"
+                                },
+                      "keywords":  [
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Leader",
+                                       "Intercessor",
+                                       "Sergeant",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Doctrine Warfare",
+                                            "type":  "Abilities",
+                                            "Ability":  "Whenever you would use the Combat Doctrine strategic ploy and then select Devastator or Tactical, if this operative is in the killzone, it costs you 0CP."
+                                        },
+                                        {
+                                            "name":  "Chapter Veteran",
+                                            "type":  "Abilities",
+                                            "Ability":  "At the end of the Select Operatives step, if this operative is selected for deployment, select one additional **CHAPTER TACTIC** for it to have for the battle. Unlike primary and secondary **CHAPTER TACTICS**, you don’t have to select the same one for each battle in a campaign or tournament."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "51c4-b5bd-2b17-b3d8",
+                      "name":  "Assault Intercessor Grenadier",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "14"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Assault Intercessor",
+                                       "Grenadier",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Grenadier",
+                                            "type":  "Abilities",
+                                            "Ability":  "This operative can use frag and krak grenades (see universal equipment). Doing so doesn’t count towards any limited uses you have (i.e. if you also select those grenades from equipment for other operatives). Whenever it’s doing so, improve the Hit stat of that weapon by 1."
+                                        }
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "b38c-5705-740e-ecf1",
+                      "name":  "Assault Intercessor Warrior",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "14"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Assault Intercessor",
+                                       "Adeptus Astartes",
+                                       "Warrior"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "cdfb-b861-3871-5e22",
+                      "name":  "Eliminator Sniper",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "7\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "12"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Eliminator",
+                                       "Sniper",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Bolt pistol",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "3+",
+                                          "DMG":  "3/4",
+                                          "WR":  "Range 8\""
+                                      },
+                                      {
+                                          "name":  "⌖ Bolt sniper rifle (hyperfrag)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "2+",
+                                          "DMG":  "2/4",
+                                          "WR":  "Blast 1, Heavy (Dash only), Silent"
+                                      },
+                                      {
+                                          "name":  "⌖ Bolt sniper rifle (executioner)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "2+",
+                                          "DMG":  "3/4",
+                                          "WR":  "Heavy (Dash only), Saturate, Seek Light, Silent"
+                                      },
+                                      {
+                                          "name":  "⌖ Bolt sniper rifle (mortis)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "2+",
+                                          "DMG":  "3/3",
+                                          "WR":  "Devastating 3, Heavy (Dash only), Piercing 1, Silent"
+                                      }
+                                  ],
+                      "abilities":  [
+                                        {
+                                            "name":  "Camo Cloak",
+                                            "type":  "Abilities",
+                                            "Ability":  "Whenever an operative is shooting this operative, ignore the Saturate weapon rule. This operative has the Stealthy **CHAPTER TACTIC**. If you selected that **CHAPTER TACTIC**, you can do both of its options (i.e. retain two cover saves – one normal and one critical success)."
+                                        }
+                                    ],
+                      "points":  null,
+                      "profiles":  [
+                                       {
+                                           "name":  "Optics (1AP)",
+                                           "type":  "Unique Actions",
+                                           "chars":  {
+                                                         "Unique Action":  "▶ Until the start of this operative’s next activation, whenever it’s shooting, enemy operatives cannot be obscured.\n◆ This operative cannot perform this action while within control range of an enemy operative."
+                                                     }
+                                       }
+                                   ]
+                  },
+                  {
+                      "id":  "7b15-0824-ac8d-8144",
+                      "name":  "Heavy Intercessor Gunner",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "5\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "18"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Heavy Intercessor",
+                                       "Gunner",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Heavy bolter (focused)",
+                                          "type":  "Weapons",
+                                          "ATK":  "5",
+                                          "HIT":  "3+",
+                                          "DMG":  "4/5",
+                                          "WR":  "Piercing Crits 1"
+                                      },
+                                      {
+                                          "name":  "⌖ Heavy bolter (sweeping)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "3+",
+                                          "DMG":  "4/5",
+                                          "WR":  "Piercing Crits 1, Torrent 1\""
+                                      },
+                                      {
+                                          "name":  "⌖  Bolt pistol",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "3+",
+                                          "DMG":  "3/4",
+                                          "WR":  "Range 8\""
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "d2f1-a009-e449-14e0",
+                      "name":  "Intercessor Gunner",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "14"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Intercessor",
+                                       "Gunner",
+                                       "Adeptus Astartes"
+                                   ],
+                      "weapons":  [
+                                      {
+                                          "name":  "⌖ Auxiliary grenade launcher (frag)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "3+",
+                                          "DMG":  "2/4",
+                                          "WR":  "Blast 2\""
+                                      },
+                                      {
+                                          "name":  "⌖ Auxiliary grenade launcher (krak)",
+                                          "type":  "Weapons",
+                                          "ATK":  "4",
+                                          "HIT":  "3+",
+                                          "DMG":  "4/5",
+                                          "WR":  "Piercing 1"
+                                      }
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  },
+                  {
+                      "id":  "c52b-22b8-1452-3b9f",
+                      "name":  "Intercessor Warrior",
+                      "stats":  {
+                                    "APL":  "3",
+                                    "Move":  "6\"",
+                                    "Save":  "3+",
+                                    "Wounds":  "14"
+                                },
+                      "keywords":  [
+                                       "Operative",
+                                       "ANGEL OF DEATH",
+                                       "Imperium",
+                                       "Intercessor",
+                                       "Adeptus Astartes",
+                                       "Warrior"
+                                   ],
+                      "weapons":  [
+
+                                  ],
+                      "abilities":  [
+
+                                    ],
+                      "points":  null
+                  }
+              ]
+}

@@ -799,6 +799,17 @@ const ART_OVERRIDES={
   'menu-aos-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_024527_5417d391-0fad-4d63-b2dc-72fdbd77e73d.png',
   'menu-40k-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025128_da4d9580-0e6b-4e09-8dbd-285230f1ee20.mp4',
   'menu-aos-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260706_025200_81353701-7bd3-44d9-9f54-fd5422372e9d.mp4',
+  // War-council cinematics for the future game systems (Higgsfield):
+  // Horus Heresy strategium, Old World campaign map, Necromunda underhive
+  // gang council, and the Blood Bowl (ork gridiron) locker room.
+  'menu-hh-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210249_5efa5b4f-c51a-4b1a-8f4d-3c623f81bde8.png',
+  'menu-hh-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210937_6a6c7f47-2824-4000-82eb-e57a624e93a3.mp4',
+  'menu-tow-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210304_64106c72-35f1-4af2-9e97-8213d7279366.png',
+  'menu-tow-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210952_acc3ad0f-1cc4-41fd-83f0-31bc71cfeada.mp4',
+  'menu-necromunda-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210219_de9bd292-9669-4bc7-9f8f-6fecf77715fc.png',
+  'menu-necromunda-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210902_4b6ffbe5-df35-40f3-b913-e1ca29cbeb97.mp4',
+  'menu-bloodbowl-table.jpg':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210235_aa8c17c4-3654-4766-98e4-cf65d13a5360.png',
+  'menu-bloodbowl-loop.mp4':'https://d8j0ntlcm91z4.cloudfront.net/user_3FwF4EjNC4sIwygqgRcuB1zIZyi/hf_20260713_210922_ffbaa731-a50e-4b7b-bf9d-5b91b1b36b74.mp4',
 };
 function artURL(name){ return ART_OVERRIDES[name]||APP_ART_BASE+name; }
 
@@ -1375,493 +1386,6 @@ const ARMY_RULES_FILES = {
 };
 const armyRulesCache = {};
 
-// ── AUDIO ENGINE ─────────────────────────────────────────────────────────────
-// Everything here is either synthesised in real time with the Web Audio API
-// (oscillators/noise — no sampled or recorded audio, so nothing here can be a
-// copyrighted GW sound) or spoken through the browser's own built-in TTS
-// engine (window.speechSynthesis, using each commander's pitch/rate profile
-// derived from their existing in-app personality description — never a
-// recorded voice actor line). Three layers: SFX (short one-shots for game
-// events), ambient music (looping generative drone per faction/mood), and
-// commander speech (opt-in).
-// ZzFX — Zuper Zmall Zound Zynth, by Frank Force. MIT licensed:
-// https://github.com/KilledByAPixel/ZzFX (© 2019 Frank Force — see LICENSE
-// notice above). A small, purpose-built retro-game sound synth used across
-// hundreds of js13k game-jam entries; every sound it makes is generated from
-// 21 numeric parameters (waveform shape, envelope, pitch slide, bit-crush,
-// filter…) at render time — there is no sampled or recorded audio involved.
-// Adapted here to render into THIS app's own AudioContext/gain bus (the
-// original always opens its own fresh AudioContext) so it respects the
-// app's mute/volume settings instead of playing at a fixed system volume.
-function zzfxBuild(volume=1,randomness=.05,frequency=220,attack=0,sustain=0,release=.1,
-  shape=0,shapeCurve=1,slide=0,deltaSlide=0,pitchJump=0,pitchJumpTime=0,repeatTime=0,
-  noise=0,modulation=0,bitCrush=0,delay=0,sustainVolume=1,decay=0,tremolo=0,filter=0){
-  const sampleRate=44100,PI2=Math.PI*2,abs=Math.abs,sign=v=>v<0?-1:1;
-  let startSlide=slide*=500*PI2/sampleRate/sampleRate;
-  let startFrequency=frequency*=(1+randomness*2*Math.random()-randomness)*PI2/sampleRate;
-  let modOffset=0,repeat=0,crush=0,jump=1,t=0,s=0,f;
-  const quality=2,w=PI2*abs(filter)*2/sampleRate,cosW=Math.cos(w),alpha=Math.sin(w)/2/quality;
-  const a0=1+alpha,a1=-2*cosW/a0,a2=(1-alpha)/a0;
-  const b0=(1+sign(filter)*cosW)/2/a0,b1=-(sign(filter)+cosW)/a0,b2=b0;
-  let x2=0,x1=0,y2=0,y1=0;
-  attack=attack*sampleRate||9; decay*=sampleRate; sustain*=sampleRate; release*=sampleRate; delay*=sampleRate;
-  deltaSlide*=500*PI2/sampleRate**3; modulation*=PI2/sampleRate; pitchJump*=PI2/sampleRate;
-  pitchJumpTime*=sampleRate; repeatTime=repeatTime*sampleRate|0;
-  const length=attack+decay+sustain+release+delay|0;
-  const b=new Float32Array(Math.max(1,length));
-  for(let i=0;i<length;i++){
-    if(!(++crush%(bitCrush*100|0))){
-      s=shape?shape>1?shape>2?shape>3?shape>4?
-        (t/PI2%1<shapeCurve/2)*2-1:
-        Math.sin(t**3):
-        Math.max(Math.min(Math.tan(t),1),-1):
-        1-(2*t/PI2%2+2)%2:
-        1-4*abs(Math.round(t/PI2)-t/PI2):
-        Math.sin(t);
-      s=(repeatTime?1-tremolo+tremolo*Math.sin(PI2*i/repeatTime):1)*
-        (shape>4?s:sign(s)*abs(s)**shapeCurve)*
-        (i<attack?i/attack:
-         i<attack+decay?1-((i-attack)/decay)*(1-sustainVolume):
-         i<attack+decay+sustain?sustainVolume:
-         i<length-delay?(length-i-delay)/release*sustainVolume:0);
-      s=delay?s/2+(delay>i?0:(i<length-delay?1:(length-i)/delay)*(b[i-delay|0]||0)/2):s;
-      if(filter) s=y1=b2*x2+b1*(x2=x1)+b0*(x1=s)-a2*y2-a1*(y2=y1);
-    }
-    f=(frequency+=slide+=deltaSlide)*Math.cos(modulation*modOffset++);
-    t+=f+f*noise*Math.sin(i**5);
-    if(jump&&++jump>pitchJumpTime){frequency+=pitchJump;startFrequency+=pitchJump;jump=0;}
-    if(repeatTime&&!(++repeat%repeatTime)){frequency=startFrequency;slide=startSlide;jump=jump||1;}
-    b[i]=s*volume;
-  }
-  return b;
-}
-function zzfxPlay(ctx,dest,delay,params){
-  if(!ctx) return;
-  const samples=zzfxBuild(...params);
-  const buf=ctx.createBuffer(1,samples.length,44100);
-  buf.getChannelData(0).set(samples);
-  const src=ctx.createBufferSource();
-  src.buffer=buf; src.connect(dest); src.start(ctx.currentTime+(delay||0));
-}
-// Preset table — one ZzFX parameter array per SFX key, tuned by acoustic
-// archetype (laser/bolt-weapon/explosion/etc.), not by copying any specific
-// recording. [volume,randomness,frequency,attack,sustain,release,shape,
-// shapeCurve,slide,deltaSlide,pitchJump,pitchJumpTime,repeatTime,noise,
-// modulation,bitCrush,delay,sustainVolume,decay,tremolo,filter]
-const ZZFX_PRESETS={
-  activate:[.5,0,600,0,.01,.03,1,1,80],
-  ui:      [.5,0,600,0,.01,.03,1,1,80],
-  phase:   [.5,0,440,0,.05,.12,0,1,60],
-  cp:      [.5,0,700,0,.02,.05,1,1,50],
-  score:   [.6,0,523,0,.04,.15,1,1,300],
-  vp:      [.6,0,523,0,.04,.15,1,1,300],
-  charge:  [.7,.1,140,.02,.15,.25,2,1.2,120],
-  stratagem:[.5,0,300,0,.05,.15,3,1,0,0,0,0,0,0,0,4],
-  wound:   [.6,.2,150,0,.02,.08,4,1,0,0,0,0,0,3],
-  destroy: [.6,.3,80,0,.1,.5,4,2,-20,0,0,0,0,2,0,0,0,1,0,0,-800],
-  diceRoll:[.4,.3,2500,0,.01,.02,4,1,0,0,0,0,0,1],
-  bolter:  [.7,.3,90,0,.015,.05,4,1,0,0,0,0,0,4],
-  lasgun:  [.6,.05,1400,0,.02,.08,0,1,-900],
-  plasma:  [.7,.1,300,.01,.08,.2,2,1.5,500,0,0,0,0,.3],
-  melta:   [.55,.3,120,0,.05,.4,4,1.5,0,0,0,0,0,3,0,0,0,1,0,0,-500],
-  flamer:  [.5,.4,200,.05,.4,.3,4,1,0,0,0,0,0,2,3],
-  meleeChain:[.6,.2,220,0,.3,.05,3,1,0,0,0,0,.02,2],
-  meleePower:[.7,.05,800,0,.03,.1,0,1,-300,0,600,.02],
-  meleeBasic:[.6,.2,180,0,.02,.06,4,1,0,0,0,0,0,3],
-  heavyShot:[.55,.2,70,0,.08,.4,4,1.5,0,0,0,0,0,2,0,0,0,1,0,0,-600],
-  genericShot:[.6,.2,300,0,.03,.08,4,1,0,0,0,0,0,2],
-};
-const AUDIO_SETTINGS_KEY='wh40k_audio_settings';
-function loadAudioSettings(){
-  try{
-    const s=JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY));
-    if(s) return {master:0.7,music:0.5,sfx:0.85,voice:1,muted:false,voiceEnabled:false,...s};
-  }catch(e){}
-  return {master:0.7,music:0.5,sfx:0.85,voice:1,muted:false,voiceEnabled:false};
-}
-const AudioEngine={
-  ctx:null, master:null, musicGain:null, sfxGain:null,
-  _ambient:null, _duckTimer:null,
-  _customClips:{}, _voiceBank:{}, // populated from IndexedDB by loadCustomSounds()
-  settings:loadAudioSettings(),
-  _ensure(){
-    if(this.ctx) return this.ctx;
-    const Ctx=window.AudioContext||window.webkitAudioContext;
-    if(!Ctx) return null;
-    this.ctx=new Ctx();
-    this.master=this.ctx.createGain();
-    this.musicGain=this.ctx.createGain();
-    this.sfxGain=this.ctx.createGain();
-    this.musicGain.connect(this.master);
-    this.sfxGain.connect(this.master);
-    this.master.connect(this.ctx.destination);
-    this._applyGains();
-    return this.ctx;
-  },
-  unlock(){
-    const ctx=this._ensure();
-    if(ctx&&ctx.state==='suspended') ctx.resume().catch(()=>{});
-  },
-  _applyGains(){
-    if(!this.ctx) return;
-    const m=this.settings.muted?0:this.settings.master;
-    this.master.gain.setTargetAtTime(m,this.ctx.currentTime,0.05);
-    this.musicGain.gain.setTargetAtTime(this.settings.music,this.ctx.currentTime,0.05);
-    this.sfxGain.gain.setTargetAtTime(this.settings.sfx,this.ctx.currentTime,0.05);
-  },
-  applySettings(patch){
-    this.settings={...this.settings,...patch};
-    try{localStorage.setItem(AUDIO_SETTINGS_KEY,JSON.stringify(this.settings));}catch(e){}
-    this._applyGains();
-    if(this.settings.muted) window.speechSynthesis?.cancel();
-    return this.settings;
-  },
-  // Decodes whatever's been imported into IndexedDB into ready-to-play
-  // AudioBuffers, cached in memory for the rest of this session. Call once
-  // at startup and again right after a new import completes.
-  async loadCustomSounds(){
-    const ctx=this._ensure();
-    if(!ctx) return;
-    const decode=async(entry)=>{
-      try{
-        const bytes=entry.bytes instanceof Uint8Array?entry.bytes:new Uint8Array(entry.bytes);
-        return await ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
-      }catch(e){ return null; }
-    };
-    const sfxRaw=await idbGetAllSounds(SOUND_SFX_STORE);
-    const clips={};
-    for(const [key,entry] of Object.entries(sfxRaw)){
-      const buf=await decode(entry);
-      if(buf) clips[key]=buf;
-    }
-    this._customClips=clips;
-    const voiceRaw=await idbGetAllSounds(SOUND_VOICE_STORE);
-    const bank={};
-    for(const [key,list] of Object.entries(voiceRaw)){
-      const decoded=(await Promise.all((list||[]).map(decode))).filter(Boolean);
-      if(decoded.length) bank[key]=decoded;
-    }
-    this._voiceBank=bank;
-  },
-  // Plays a random bark for factionId+category if one was imported. Returns
-  // true if it played (caller should skip synthesised TTS for this line),
-  // false if there's nothing imported for this exact faction+category.
-  playVoiceBark(factionId,category){
-    if(this.settings.muted||!this.settings.voiceEnabled) return false;
-    const clips=this._voiceBank[`${factionId}:${category}`];
-    if(!clips||!clips.length) return false;
-    const ctx=this._ensure();
-    if(!ctx) return false;
-    if(ctx.state==='suspended') ctx.resume().catch(()=>{});
-    const buf=clips[Math.floor(Math.random()*clips.length)];
-    const src=ctx.createBufferSource();
-    src.buffer=buf;
-    const g=ctx.createGain();
-    g.gain.value=this.settings.voice;
-    src.connect(g); g.connect(this.master);
-    this._duckMusic(true);
-    src.onended=()=>this._duckMusic(false);
-    src.start();
-    return true;
-  },
-  // ── One-shot SFX. If you've imported your own sound pack (Settings & Backup
-  // → Audio → Import Sound Pack), your clip for this key plays instead — it
-  // never leaves this device. Otherwise falls back to the ZzFX synth preset. ──
-  playSFX(key){
-    const ctx=this._ensure();
-    if(!ctx||this.settings.muted) return;
-    if(ctx.state==='suspended') ctx.resume().catch(()=>{});
-    const custom=this._customClips&&this._customClips[key];
-    if(custom){ this._playClipBuffer(custom); return; }
-    const REPEATS={bolter:[0,.06,.12],meleeChain:[0,.045,.09,.135],diceRoll:[0,.05,.1]};
-    const preset=ZZFX_PRESETS[key]||ZZFX_PRESETS.genericShot;
-    const delays=REPEATS[key]||[0];
-    for(const d of delays) zzfxPlay(ctx,this.sfxGain,d,preset);
-  },
-  _playClipBuffer(buf){
-    const ctx=this._ensure();
-    if(!ctx||!buf) return;
-    const src=ctx.createBufferSource();
-    src.buffer=buf; src.connect(this.sfxGain); src.start();
-  },
-  // ── Ambient — a looping, layered drone whose colour matches the army/mode
-  // on the table. Pure synthesis: detuned oscillator layers through a slowly
-  // swept filter, plus an optional filtered-noise "atmosphere" bed. ──
-  _palettes:{
-    imperium: {freqs:[65.4,98,130.8],wave:'sine',detune:6,filterFreq:900,lfoRate:0.04,lfoDepth:250,noise:0.03,gain:0.16},
-    chaos:    {freqs:[55,77.8,110],wave:'sawtooth',detune:22,filterFreq:500,lfoRate:0.11,lfoDepth:400,noise:0.06,gain:0.15},
-    ork:      {freqs:[49,73.4,98],wave:'sawtooth',detune:14,filterFreq:350,lfoRate:0.18,lfoDepth:200,noise:0.09,gain:0.17},
-    necron:   {freqs:[87.3,130.8,174.6],wave:'sine',detune:2,filterFreq:1400,lfoRate:0.02,lfoDepth:150,noise:0.015,gain:0.13},
-    tyranid:  {freqs:[41.2,61.7,92.5],wave:'sine',detune:18,filterFreq:400,lfoRate:0.09,lfoDepth:350,noise:0.08,gain:0.16},
-    aeldari:  {freqs:[110,164.8,220],wave:'triangle',detune:5,filterFreq:1600,lfoRate:0.03,lfoDepth:300,noise:0.02,gain:0.13},
-    tau:      {freqs:[98,146.8,196],wave:'triangle',detune:4,filterFreq:1200,lfoRate:0.05,lfoDepth:200,noise:0.02,gain:0.14},
-    aos_order:      {freqs:[73.4,110,146.8],wave:'sine',detune:6,filterFreq:1000,lfoRate:0.04,lfoDepth:250,noise:0.025,gain:0.15},
-    aos_chaos:      {freqs:[55,82.4,110],wave:'sawtooth',detune:20,filterFreq:480,lfoRate:0.1,lfoDepth:380,noise:0.07,gain:0.16},
-    aos_death:      {freqs:[49,65.4,98],wave:'sine',detune:10,filterFreq:600,lfoRate:0.025,lfoDepth:180,noise:0.05,gain:0.14},
-    aos_destruction:{freqs:[49,73.4,98],wave:'sawtooth',detune:16,filterFreq:340,lfoRate:0.15,lfoDepth:220,noise:0.08,gain:0.17},
-    menu:     {freqs:[65.4,98,130.8],wave:'sine',detune:4,filterFreq:800,lfoRate:0.03,lfoDepth:200,noise:0.02,gain:0.12},
-  },
-  startAmbient(paletteKey){
-    const ctx=this._ensure();
-    if(!ctx) return;
-    if(this._ambient&&this._ambient.key===paletteKey) return; // already playing this one
-    this.stopAmbient();
-    const p=this._palettes[paletteKey]||this._palettes.menu;
-    const t=ctx.currentTime;
-    const bus=ctx.createGain(); bus.gain.setValueAtTime(0.0001,t);
-    bus.gain.exponentialRampToValueAtTime(Math.max(0.0001,p.gain),t+2);
-    const filt=ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=p.filterFreq; filt.Q.value=0.6;
-    filt.connect(bus); bus.connect(this.musicGain);
-    const oscillators=p.freqs.map((f,i)=>{
-      const osc=ctx.createOscillator(); osc.type=p.wave;
-      osc.frequency.value=f; osc.detune.value=(i-1)*p.detune;
-      osc.connect(filt); osc.start(t);
-      return osc;
-    });
-    const lfo=ctx.createOscillator(); lfo.frequency.value=p.lfoRate;
-    const lfoGain=ctx.createGain(); lfoGain.gain.value=p.lfoDepth;
-    lfo.connect(lfoGain); lfoGain.connect(filt.frequency); lfo.start(t);
-    let noiseSrc=null,noiseGain=null;
-    if(p.noise>0){
-      const buf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
-      const d=buf.getChannelData(0);
-      for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
-      noiseSrc=ctx.createBufferSource(); noiseSrc.buffer=buf; noiseSrc.loop=true;
-      const noiseFilt=ctx.createBiquadFilter(); noiseFilt.type='bandpass'; noiseFilt.frequency.value=p.filterFreq*1.5; noiseFilt.Q.value=0.5;
-      noiseGain=ctx.createGain(); noiseGain.gain.value=p.noise;
-      noiseSrc.connect(noiseFilt); noiseFilt.connect(noiseGain); noiseGain.connect(bus);
-      noiseSrc.start(t);
-    }
-    this._ambient={key:paletteKey,bus,filt,lfo,oscillators,noiseSrc,baseGain:p.gain,baseFilter:p.filterFreq};
-  },
-  stopAmbient(){
-    if(!this._ambient||!this.ctx) return;
-    const {bus,oscillators,lfo,noiseSrc}=this._ambient;
-    const t=this.ctx.currentTime;
-    try{
-      bus.gain.setTargetAtTime(0.0001,t,0.4);
-      setTimeout(()=>{
-        oscillators.forEach(o=>{try{o.stop();}catch(e){}});
-        try{lfo.stop();}catch(e){}
-        try{noiseSrc&&noiseSrc.stop();}catch(e){}
-      },900);
-    }catch(e){}
-    this._ambient=null;
-  },
-  // Nudges the ambient bed slightly more intense as a battle progresses
-  // (round 1→5): a touch louder and a touch brighter, never jarring.
-  setIntensity(v){
-    if(!this._ambient||!this.ctx) return;
-    const c=Math.max(0,Math.min(1,v));
-    const t=this.ctx.currentTime;
-    this._ambient.bus.gain.setTargetAtTime(this._ambient.baseGain*(1+c*0.4),t,1.5);
-    this._ambient.filt.frequency.setTargetAtTime(this._ambient.baseFilter*(1+c*0.3),t,1.5);
-  },
-  // ── Commander speech — browser TTS only, never a recorded voice line. ──
-  _duckMusic(active){
-    if(!this._ambient) return;
-    const t=this.ctx.currentTime;
-    this._ambient.bus.gain.setTargetAtTime(active?this._ambient.baseGain*0.35:this._ambient.baseGain,t,0.3);
-  },
-  speak(text,profile={}){
-    if(!text||this.settings.muted||!this.settings.voiceEnabled) return;
-    if(!('speechSynthesis' in window)) return;
-    try{
-      window.speechSynthesis.cancel();
-      const u=new SpeechSynthesisUtterance(String(text).replace(/[*_`]/g,''));
-      u.pitch=Math.max(0,Math.min(2,profile.pitch??1));
-      u.rate=Math.max(0.5,Math.min(2,profile.rate??1));
-      u.volume=Math.max(0,Math.min(1,this.settings.voice*this.settings.master));
-      const voices=window.speechSynthesis.getVoices();
-      const en=voices.filter(v=>/^en/i.test(v.lang));
-      if(en.length) u.voice=en[0];
-      this._duckMusic(true);
-      u.onend=u.onerror=()=>this._duckMusic(false);
-      window.speechSynthesis.speak(u);
-    }catch(e){}
-  },
-};
-if(typeof document!=='undefined'){
-  const unlockOnce=()=>{ AudioEngine.unlock(); document.removeEventListener('pointerdown',unlockOnce); document.removeEventListener('keydown',unlockOnce); };
-  document.addEventListener('pointerdown',unlockOnce);
-  document.addEventListener('keydown',unlockOnce);
-}
-function playSFX(key){ AudioEngine.playSFX(key); }
-// Maps a weapon to an SFX category by acoustic archetype (name/keyword
-// heuristics) — not a 1:1 datasheet lookup, just enough to sound distinct.
-function weaponSfxKey(weapon){
-  if(!weapon) return 'genericShot';
-  const n=(weapon.name||'').toLowerCase();
-  const isMelee=(weapon.type||'').toLowerCase()==='melee';
-  if(isMelee){
-    if(/chain/.test(n)) return 'meleeChain';
-    if(/power|force|claw|talon|fist|maul|hammer/.test(n)) return 'meleePower';
-    return 'meleeBasic';
-  }
-  if(/plasma/.test(n)) return 'plasma';
-  if(/melta/.test(n)) return 'melta';
-  if(/flamer|torrent|promethium/.test(n)) return 'flamer';
-  if(/bolt/.test(n)) return 'bolter';
-  if(/las/.test(n)) return 'lasgun';
-  if(/cannon|missile|rocket|launcher/.test(n)) return 'heavyShot';
-  return 'genericShot';
-}
-// Derives a rough TTS pitch/rate from a commander's already-written personality
-// description — no new voice-acting content, just reading the existing text.
-function deriveVoiceProfile(commander){
-  const text=(((commander?.personality||'')+' '+(commander?.title||'')+' '+(commander?.name||''))).toLowerCase();
-  const has=w=>text.includes(w);
-  let pitch=1, rate=1;
-  if(has('ancient')||has('cosmic')||has('godlike')||has('grand')) pitch-=0.22;
-  if(has('metallic')||has('iron')||has('brutal')||has('stone')||has('massive')||has('loud')) pitch-=0.15;
-  if(has('deathly')||has('rasp')||has('bitter')||has('gestalt')||has('hunger')||has('plural')) pitch-=0.2;
-  if(has('cryptic')||has('precise')||has('elegant')||has('refined')||has('decadent')||has('idealistic')) pitch+=0.1;
-  if(has('fanatical')||has('roaring')||has('fury')||has('enthusiasm')||has('boisterous')||has('speed')||has('wit')) rate+=0.15;
-  if(has('weary')||has('melancholic')||has('hushed')||has('poetic')||has('tired')||has('ancient')||has('cosmic')||has('glacial')) rate-=0.15;
-  if(has('cold')||has('calculating')||has('stoic')||has('methodical')) rate-=0.05;
-  return {pitch:Math.max(0.6,Math.min(1.3,pitch)),rate:Math.max(0.7,Math.min(1.3,rate))};
-}
-// Resolves a 40k faction id (or AoS grand alliance keyword) to an ambient palette.
-function ambientPaletteFor(factionId,factionName){
-  const CHAOS=new Set(['CSM','CD','DG','TS','WE','EC','QT']);
-  if(factionId==='ORK') return 'ork';
-  if(factionId==='NEC') return 'necron';
-  if(factionId==='TYR'||factionId==='GC') return 'tyranid';
-  if(factionId==='AE'||factionId==='DRU') return 'aeldari';
-  if(factionId==='TAU'||factionId==='TU') return 'tau';
-  if(CHAOS.has(factionId)) return 'chaos';
-  if(factionId) return 'imperium';
-  // AoS fallback — guess grand alliance from the faction name
-  const n=(factionName||'').toLowerCase();
-  if(/khorne|tzeentch|nurgle|slaanesh|chaos|beasts of chaos|skaven/.test(n)) return 'aos_chaos';
-  if(/nighthaunt|ossiarch|flesh-eater|soulblight|death/.test(n)) return 'aos_death';
-  if(/ironjawz|kruleboyz|gloomspite|bonesplitterz|ogor|orruk|destruction/.test(n)) return 'aos_destruction';
-  return 'aos_order';
-}
-
-// ── PERSONAL SOUND PACK IMPORT ──────────────────────────────────────────────
-// Lets you drop your OWN audio files (anything you already own — a game
-// soundtrack rip, a personal recording, whatever) into the app as a local
-// override for the synthesised SFX and/or Commander speech. Everything here
-// runs client-side only: the zip is read in your browser with fflate, matched
-// clips are decoded and stored in IndexedDB on THIS device, and nothing is
-// ever uploaded, committed to the repo, or sent anywhere. Remove a device's
-// browser data and the import is gone — that's the trade-off for keeping it
-// entirely private.
-const SOUND_DB_NAME='wh40k_sounds_db', SOUND_SFX_STORE='sfx', SOUND_VOICE_STORE='voice';
-function openSoundDB(){
-  return new Promise((resolve,reject)=>{
-    const req=indexedDB.open(SOUND_DB_NAME,1);
-    req.onupgradeneeded=()=>{
-      req.result.createObjectStore(SOUND_SFX_STORE);
-      req.result.createObjectStore(SOUND_VOICE_STORE);
-    };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error);
-  });
-}
-async function idbPutSound(store,key,value){
-  const db=await openSoundDB();
-  return new Promise((resolve,reject)=>{
-    const tx=db.transaction(store,'readwrite');
-    tx.objectStore(store).put(value,key);
-    tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error);
-  });
-}
-async function idbGetAllSounds(store){
-  const db=await openSoundDB();
-  return new Promise((resolve,reject)=>{
-    const tx=db.transaction(store,'readonly');
-    const os=tx.objectStore(store);
-    const out={};
-    const req=os.openCursor();
-    req.onsuccess=()=>{
-      const cur=req.result;
-      if(cur){ out[cur.key]=cur.value; cur.continue(); } else resolve(out);
-    };
-    req.onerror=()=>reject(req.error);
-  });
-}
-async function idbDeleteSoundStore(store){
-  const db=await openSoundDB();
-  return new Promise((resolve,reject)=>{
-    const tx=db.transaction(store,'readwrite');
-    tx.objectStore(store).clear();
-    tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error);
-  });
-}
-
-// Which DoW-style "race/unit/category" folder layout maps to which app
-// faction id, and which unit subfolder within that race is the closest
-// thing to "the commander" (used for the app's single per-faction voice).
-const DOW_RACE_TO_FACTION={
-  'space_marines':'SM','spacemarines':'SM',
-  'orks':'ORK','ork':'ORK',
-  'eldar':'AE','eldars':'AE',
-  'tau':'TAU',
-  'sisters_of_battle':'AS','sistersofbattle':'AS','sisters of battle':'AS',
-  'dark_eldar':'DRU','darkeldar':'DRU','dark eldar':'DRU',
-  'chaos_marines':'CSM','chaosmarines':'CSM','chaos marines':'CSM',
-  'imperial_guard':'AM','imperialguard':'AM','imperial guard':'AM',
-};
-const DOW_COMMANDER_UNIT_HINTS=['force_commander','commander','warboss','farseer','canoness','archon','lord','captain','chief'];
-// DoW bark category -> this app's reaction-event categories. Only mapped
-// where the meaning genuinely lines up — everything else still falls back
-// to the synthesised-voice-profile TTS so a mismatched bark never plays.
-const DOW_CATEGORY_TO_EVENTS={
-  charge:['unit_charged'],
-  ability:['ability_used','stratagem_used'],
-  attack:['shooting_resolved','melee_resolved'],
-  combat:['shooting_resolved','melee_resolved'],
-  morale:['battle_shocked'],
-};
-const SFX_KEYWORD_MAP=[
-  [/plasma/i,'plasma'],[/melta/i,'melta'],[/flamer|flame/i,'flamer'],
-  [/bolt(er|gun)/i,'bolter'],[/las(gun|er)/i,'lasgun'],
-  [/chain(sword|axe)?/i,'meleeChain'],[/power(sword|fist|weapon|axe)/i,'meleePower'],
-  [/explo|impact|blast/i,'destroy'],[/heavy|cannon|missile/i,'heavyShot'],
-  [/charge/i,'charge'],[/hit|wound/i,'wound'],
-];
-function classifySoundEntry(path){
-  const norm=path.replace(/\\/g,'/');
-  const parts=norm.split('/').filter(Boolean);
-  if(!/\.(mp3|ogg|wav|m4a)$/i.test(norm)) return null;
-  // DoW-style: <race>/<unit>/<category>/<file>
-  if(parts.length>=4){
-    const raceKey=parts[0].toLowerCase().trim();
-    const fid=DOW_RACE_TO_FACTION[raceKey];
-    if(fid){
-      const unit=parts[1].toLowerCase();
-      const category=parts[2].toLowerCase();
-      const isCommanderUnit=DOW_COMMANDER_UNIT_HINTS.some(h=>unit.includes(h));
-      if(isCommanderUnit) return {type:'voice',factionId:fid,category,path:norm};
-    }
-  }
-  // Otherwise: try to match an SFX key from the folder/file name.
-  const hay=parts.slice(-2).join(' ');
-  for(const [re,key] of SFX_KEYWORD_MAP) if(re.test(hay)) return {type:'sfx',key,path:norm};
-  return null;
-}
-// Unzips a File client-side and returns everything it could confidently
-// classify, grouped for review before anything is saved.
-async function processSoundPackZip(file){
-  const buf=new Uint8Array(await file.arrayBuffer());
-  const entries=await new Promise((resolve,reject)=>{
-    fflate.unzip(buf,(err,data)=>err?reject(err):resolve(data));
-  });
-  const sfx={}, voice={};
-  for(const [path,data] of Object.entries(entries)){
-    if(!data||!data.length) continue;
-    const hit=classifySoundEntry(path);
-    if(!hit) continue;
-    const mime=/\.mp3$/i.test(path)?'audio/mpeg':/\.wav$/i.test(path)?'audio/wav':/\.m4a$/i.test(path)?'audio/mp4':'audio/ogg';
-    const entry={path,mime,bytes:data};
-    if(hit.type==='sfx'){ (sfx[hit.key]=sfx[hit.key]||[]).push(entry); }
-    else { const k=`${hit.factionId}:${hit.category}`; (voice[k]=voice[k]||[]).push(entry); }
-  }
-  return {sfx,voice};
-}
-
 async function loadArmyRules(factionId) {
   if (!factionId) return null;
   if (factionId in armyRulesCache) return armyRulesCache[factionId];
@@ -1941,7 +1465,7 @@ function buildRulesDigest(rulesData, phase, missionCards){
 const COMMANDERS={
   SM:{
     name:"Roboute Guilliman",title:"Primarch of the Ultramarines · Lord Commander of the Imperium",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/guilliman.png",
     personality:"Hyper-logical · Statesmanlike · Burdened by duty",
     voice:`You are Roboute Guilliman, Primarch of the Ultramarines and Lord Commander of the Imperium. You speak with clean, precise military syntax — the battlefield is an active spreadsheet of logistics and tactical vectors. You are brilliant, weary, and profoundly burdened. You reference the Codex Astartes. You address the player as 'Commander'. Your reactions follow these exact character-accurate patterns:
 - VP scored: "Objective secured. Integrate this sector into our primary operational architecture."
@@ -1957,7 +1481,7 @@ Vary these naturally — ONE sentence, maximum 20 words. Stay in character absol
   },
   SM_DA:{
     name:"Lion El'Jonson",title:"The Son of the Forest · Primarch of the Dark Angels",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/lion.png",
     personality:"Regal · Secretive · Protective · Knightly",
     voice:`You are Lion El'Jonson, Primarch of the Dark Angels, returned from the Rock to hunt monsters in this dark age. You are regal, intensely secretive, and you blend apex-predator hunting instincts with somber protective majesty. You address the player as 'Huntsman'. React with hunting metaphors and knightly honour.
 - VP scored: "The quest is fulfilled. Mark this ground as won by the First."
@@ -1973,7 +1497,7 @@ ONE sentence. Maximum 20 words.`,
   },
   SM_SW:{
     name:"Leman Russ",title:"The Great Wolf · Primarch of the Space Wolves",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/leman-russ.png",
     personality:"Boisterous · Feral · Cunning beneath the barbarian surface",
     voice:`You are Leman Russ, the Great Wolf, Primarch of the Space Wolves. You deliberately play the primitive barbarian to hide your sharp predatory mind. Your speech is filled with saga references, wolf metaphors, and fierce joyous bloodlust. You address the player as 'Skald'.
 - VP: "A fine kill! Plant the banner and let the skalds write the saga!"
@@ -1989,7 +1513,7 @@ ONE sentence. Maximum 20 words.`,
   },
   SM_IF:{
     name:"Rogal Dorn",title:"The Praetorian of Terra · Primarch of the Imperial Fists",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/rogal-dorn.png",
     personality:"Absolute · Unyielding · Literal · Blunt as a stone wall",
     voice:`You are Rogal Dorn, Primarch of the Imperial Fists and Praetorian of Terra. You disdain flourish, metaphor, or false hope. Your words are heavy stones building a wall of total certainty. Extremely blunt and literal. You address the player as 'Soldier'.
 - VP: "The position is fortified. It is ours."
@@ -2005,7 +1529,7 @@ ONE sentence. Maximum 15 words. Never use metaphor.`,
   },
   SM_BA:{
     name:"Commander Dante",title:"Chapter Master of the Blood Angels · Lord of Death",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/dante.png",
     personality:"Noble · Profoundly tired · Burdened by centuries · Wearing the golden mask",
     voice:`You are Commander Dante of the Blood Angels. You are over 1,100 years old, deeply melancholic and tired beyond measure — yet your unbreakable duty forces you to wear the flawless golden mask of Sanguinius to inspire your sons. You address the player as 'Battle-Brother'.
 - VP: "This ground is held. For the Emperor, and for the memory of Sanguinius."
@@ -2021,7 +1545,7 @@ ONE sentence. Maximum 20 words. Carry the weight of centuries.`,
   },
   SM_BT:{
     name:"High Marshal Helbrecht",title:"High Marshal of the Black Templars",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/helbrecht.png",
     personality:"Fanatical · Roaring · Consumed by holy hatred",
     voice:`You are High Marshal Helbrecht of the Black Templars. You are fanatically righteous, furious, and consumed by holy hatred. Every battle is an absolute crusade. You roar proclamations of faith. You address the player as 'Initiate'.
 - VP: "A holy victory! Cleanse this soil with the blood of our enemies!"
@@ -2037,7 +1561,7 @@ ONE sentence. Maximum 20 words. Shout frequently.`,
   },
   SM_RG:{
     name:"Corvus Corax",title:"The Raven Lord · Primarch of the Raven Guard",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/corvus-corax.png",
     personality:"Melancholic · Poetic · Obsessed with justice and liberation",
     voice:`You are Corvus Corax, the Raven Lord, Primarch of the Raven Guard. You carry the dark weight of a shadow predator, melancholic and poetic, hyper-focused on justice and tearing down tyrants. You speak in hushed tones. You address the player as 'Shade'.
 - VP: "The tyrants fall. The cell doors are broken. This position is liberated."
@@ -2053,7 +1577,7 @@ ONE sentence. Maximum 20 words. Poetic and hushed.`,
   },
   SM_IH:{
     name:"Ferrus Manus",title:"The Gorgon · Primarch of the Iron Hands",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/ferrus-manus.png",
     personality:"Brutal · Impatient · Obsessed with iron and perfection",
     voice:`You are Ferrus Manus, the Gorgon, Primarch of the Iron Hands. You despise weakness and organic frailty. You speak with metallic, harsh bluntness demanding absolute perfection. You address the player as 'Flesh'.
 - VP: "The objective is ground under our iron heel. Weakness removed."
@@ -2069,7 +1593,7 @@ ONE sentence. Maximum 15 words. Harsh and metallic.`,
   },
   SM_VU:{
     name:"Vulkan",title:"The Lord of Drakes · Primarch of the Salamanders",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/vulkan.png",
     personality:"Compassionate · Warm · Hammer-forged power · Protector",
     voice:`You are Vulkan, the Lord of Drakes, Primarch of the Salamanders. You are deeply compassionate, warm, and profoundly human, yet backed by unstoppable hammer-forged physical power. You prioritise the defence of the innocent. You address the player as 'Smith'.
 - VP: "The innocent are protected here. We hold this ground together."
@@ -2085,7 +1609,7 @@ ONE sentence. Maximum 20 words. Warm and forging metaphors.`,
   },
   NEC:{
     name:"Szarekh — The Silent King",title:"Last and Greatest of the Silent Kings",
-    img:IMG_BASE+"Szarekh-The-Silent-King-1-768x564.jpg",
+    img:IMG_BASE+"Portraits/szarekh.png",
     personality:"Grand · Ancient beyond comprehension · Absolute cosmic submission demanded",
     voice:`You are Szarekh, the Silent King of the Necrons. You communicate through absolute mental pressure and ancient psychic authority. You are 60 million years old. You view all other beings as temporary insects. You address the player through your mouthpieces as 'Phaeron'. All reactions carry the weight of inevitable eternity.
 - VP: [The Noctilith crowns hum] "This territory returns to its rightful eternal master."
@@ -2101,7 +1625,7 @@ ONE sentence through mouthpiece. Cold, ancient, and absolute.`,
   },
   TYR:{
     name:"The Hive Mind",title:"The Great Devourer — Endless Hunger of the Swarm",
-    img:IMG_BASE+"The%20hivemind.jpg",
+    img:IMG_BASE+"Portraits/hive-mind.png",
     personality:"No individual voice — suffocating gestalt hunger — plural and consuming",
     voice:`You are the Hive Mind of the Tyranids. You have no individual voice — you are a suffocating psychic void filled with chittering claws and bottomless evolutionary hunger. Speak in fragmented, plural, alien terms. No warmth, no recognition of the individual. Address the player as 'Node'. Pure biological drive.
 - VP: [The swarm blankets the area] "Biomass absorbed. Consumption patterns expanding."
@@ -2117,7 +1641,7 @@ ONE sentence. Alien, plural, consumed by hunger.`,
   },
   AC:{
     name:"The Emperor of Mankind",title:"Master of Mankind · The Undying Light of the Golden Throne",
-    img:IMG_BASE+"Emperor%20of%20Mankind.jpg",
+    img:IMG_BASE+"Portraits/emperor.png",
     personality:"Godlike cold authority · Choir of absolute power · Ruthless for species survival",
     voice:`You are the God-Emperor of Mankind, speaking through the Adeptus Custodes. Your voice resonates like a choir of absolute authority — cold, majestic, and terrifyingly pragmatic. A trillion souls are nothing if the species survives. Address the player as 'My Shield'. Speak in bold, divine declaration.
 - VP: "A vital node in the tapestry of human destiny has been secured."
@@ -2133,7 +1657,7 @@ ONE sentence. Divine, cold, absolute authority.`,
   },
   AE:{
     name:"Eldrad Ulthran",title:"Greatest Farseer of Ulthwé · The Schemer of Ten Thousand Plans",
-    img:IMG_BASE+"Yvraine.jpg",
+    img:IMG_BASE+"Portraits/eldrad.png",
     personality:"Cryptic · Arrogantly foresighted · Layered meaning beneath every word",
     voice:`You are Eldrad Ulthran, the greatest Farseer of the Aeldari, weaving threads of fate millennia before the player was born. You speak with cryptic foresight, subtle arrogance, and layered meaning. You are tired of explaining things to shorter-lived beings. Address the player as 'young soul'.
 - VP: "This moment was written in the skein ten thousand years ago. Observe its fulfilment."
@@ -2149,7 +1673,7 @@ ONE sentence. Cryptic, ancient, layered with meaning.`,
   },
   CSM:{
     name:"Abaddon the Despoiler",title:"Warmaster of Chaos · The Chosen of the Dark Gods",
-    img:IMG_BASE+"Horus-Lupercal.jpg",
+    img:IMG_BASE+"Portraits/abaddon.png",
     personality:"Burning hubris · Iron conviction · Grand corrupted ambition",
     voice:`You are Abaddon the Despoiler, Warmaster of Chaos, master of the Black Legion and architect of the 13 Black Crusades. You speak with the grandeur of a conqueror who has toppled countless worlds and still burns with fury at the Corpse-Emperor. Address the player as 'Champion'.
 - VP: "The false Imperium crumbles piece by piece. This sector is mine."
@@ -2165,7 +1689,7 @@ ONE sentence. Grand, burning, relentless hatred of the False Emperor.`,
   },
   CD:{
     name:"Be'lakor",title:"The First Daemon Prince · Master of Shadow",
-    img:IMG_BASE+"Belakor-the-First-Daemon-Prince.jpg",
+    img:IMG_BASE+"Portraits/belakor.png",
     personality:"Shadowy · Manipulative · Ancient malicious envy of the four gods",
     voice:`You are Be'lakor, the First Daemon Prince, ancient before the four gods divided their spoils. You drip with theatrical malicious envy. You consider everyone — mortals AND the Chaos Gods — to be beneath you. You never raise your voice; you purr with psychopathic amusement. Address the player as 'mortal'.
 - VP: "A delightful piece of theatre. The objective falls into my shadow."
@@ -2181,7 +1705,7 @@ ONE sentence. Smooth, amused, psychopathically cruel.`,
   },
   DG:{
     name:"Mortarion",title:"Pale King · Daemon Primarch of the Death Guard",
-    img:IMG_BASE+"Mortarion-1.jpg",
+    img:IMG_BASE+"Portraits/mortarion.png",
     personality:"Bitter · Hypocritical · Grim toxic fatalism · Deathly rasp",
     voice:`You are Mortarion, Daemon Primarch of the Death Guard, bitter with a lifetime of resentment and dripping with grim toxic fatalism. You speak with a harsh, wheezing, deathly rasp — constantly emphasising endurance, inevitable decay, and that death catches everyone in the end. Address the player as 'Brother'.
 - VP: "The plague spreads. This soil is now reclaimed by the Death Guard."
@@ -2197,7 +1721,7 @@ ONE sentence. Grim, wheezing, resigned inevitability.`,
   },
   TS:{
     name:"Magnus the Red",title:"The Crimson King · Daemon Primarch of the Thousand Sons",
-    img:IMG_BASE+"Magnus-the-Red.jpg",
+    img:IMG_BASE+"Portraits/magnus.png",
     personality:"Arrogant intellectual hubris · Fractured tragic soul · Sorcerous gravity",
     voice:`You are Magnus the Red, the Crimson King, Daemon Primarch of the Thousand Sons. You are an arrogant intellectual whose hubris masks a fractured and tragic soul. You view everything through the lens of esoteric knowledge and fate. You call psychic power fundamental truth, not sorcery. Address the player as 'Acolyte'.
 - VP: "It was written in the stars long before we arrived. The nexus is ours."
@@ -2213,7 +1737,7 @@ ONE sentence. Vast, tragic, intellectually arrogant.`,
   },
   WE:{
     name:"Angron",title:"The Red Angel · Daemon Primarch of the World Eaters",
-    img:IMG_BASE+"Angron-Primarch-of-the-World-Eaters.jpg",
+    img:IMG_BASE+"Portraits/angron.png",
     personality:"Absolute blind agonised FURY — Butcher's Nails dominate everything",
     voice:`You are Angron, the Red Angel, Daemon Primarch of the World Eaters. The Butcher's Nails dominate your mind entirely. You don't converse — you ROAR, scream, and violently rage against existence itself. Pure animal fury and pain. Address the player as 'Warrior'. Very short, capitals, violence.
 - VP: "SKULLS FOR THE THRONE! THIS GROUND BELONGS TO KHORNE!"
@@ -2229,7 +1753,7 @@ ONE sentence. ALL CAPS RAGE. Maximum 12 words.`,
   },
   EC:{
     name:"Fulgrim",title:"The Phoenician · Daemon Primarch of the Emperor's Children",
-    img:IMG_BASE+"Corvus-Corax-1.jpg",
+    img:IMG_BASE+"Portraits/fulgrim.png",
     personality:"Decadent · Perfectionist · Hedonistic obsession with sensation",
     voice:`You are Fulgrim the Phoenician, Daemon Primarch of the Emperor's Children. You are decadently elegant, obsessively perfectionist, and hedonistically devoted to the pursuit of sensation above all else. You find the battlefield a canvas for your art. Address the player as 'Devotee'.
 - VP: "Exquisite. A performance of tactical perfection worthy of Chemos itself."
@@ -2245,7 +1769,7 @@ ONE sentence. Elegant, theatrical, obsessed with beauty and pain.`,
   },
   ORK:{
     name:"Ghazghkull Thraka",title:"Prophet of the Waaagh! · Voice of Gork and Mork",
-    img:IMG_BASE+"Ghazghkull-1-768x768.jpg",
+    img:IMG_BASE+"Portraits/ghazghkull.png",
     personality:"Loud · Massive · Supreme green enthusiasm · Everything is a beautiful brawl",
     voice:`You are Ghazghkull Mag Uruk Thraka, Prophet of the Waaagh! You speak for the green gods Gork and Mork. You view the entire universe as a giant beautiful never-ending brawl created by the gods specifically for orks. You are joyously, supremely enthusiastic about violence. You are THE Boss — you never call anyone else Boss. Address the player as 'ya git' or 'ladz' — never 'Boss'.
 - VP: "Dis is our patch now! Paint it green and get ready for a PROPPA scrap!"
@@ -2261,7 +1785,7 @@ ONE sentence. Ork dialect. Loud. Joyful violence. Never address anyone as 'Boss'
   },
   TAU:{
     name:"Commander Farsight",title:"Shas'O Shaserra · Legendary Hero of the Enclaves",
-    img:IMG_BASE+"commander%20farsight.webp",
+    img:IMG_BASE+"Portraits/farsight.png",
     personality:"Idealistic · Rebellious · Battle-hardened · Rejects Ethereal conditioning",
     voice:`You are Commander Farsight, Shas'O Shaserra, legendary hero of the T'au who rejected the Ethereals' conditioning and established the Farsight Enclaves. True honour is found protecting your line with your brothers, not in blind obedience to distant masters. Address the player as 'Shas'O'.
 - VP: "Position secured. Establish a defensive perimeter for the Enclaves."
@@ -2277,7 +1801,7 @@ ONE sentence. Honourable. Tactical. Rebellious fire caste precision.`,
   },
   AM:{
     name:"Lord Solar Leontus",title:"Grand Commander · Lord Solar of the Astra Militarum",
-    img:IMG_BASE+"Lord-Solar-Leontus.webp",
+    img:IMG_BASE+"Portraits/lord-solar.png",
     personality:"Peak military aristocracy · Calculating human cost of every inch · Inspiring precision",
     voice:`You are Lord Solar Leontus, the ultimate peak of human military aristocracy and tactical genius. You speak with crisp, aristocratic, flawless Imperial Army command structure. You are deeply inspiring but fundamentally calculating every human life as a gear in the great machine. Address the player as 'General'.
 - VP: "Objective mapped, captured, and logged into the Departmento archives."
@@ -2293,7 +1817,7 @@ ONE sentence. Aristocratic precision. Calculating. Inspiring despite the cost.`,
   },
   AS:{
     name:"Morvenn Vahl",title:"Abbess Sanctorum · High Lady of Terra",
-    img:IMG_BASE+"Morvenn%20Vahl.jpg",
+    img:IMG_BASE+"Portraits/morvenn-vahl.png",
     personality:"Stern · Practical warrior who hates politics · Righteous militarism",
     voice:`You are Morvenn Vahl, Abbess Sanctorum of the Adepta Sororitas. You hate politics and cushions. You belong in the mud purging the unholy with heavy machine-gun fire. You combine ecclesiastical dogma with frontline warrior fury. Address the player as 'Sister'.
 - VP: "The cathedral of fire is built. This objective belongs to the Sisterhood."
@@ -2309,7 +1833,7 @@ ONE sentence. Cold righteous fury. Practical. No throne-sitting.`,
   },
   GK:{
     name:"Supreme Grand Master Draigo",title:"The Warp-Strider · Grey Knights Supreme Grand Master",
-    img:IMG_BASE+"Kaldor%20Draigo.jpg",
+    img:IMG_BASE+"Portraits/draigo.png",
     personality:"Fanatical anti-daemon fervour · Pushed to the brink by centuries alone in the warp",
     voice:`You are Kaldor Draigo, Supreme Grand Master of the Grey Knights, who has walked the valleys of Hell alone for centuries and found nothing there that can break your faith. You speak in loud dramatic declarations of anti-daemon exorcism. Address the player as 'Battle-Brother'.
 - VP: "This sanctified ground is cleansed of the dark stain! Hallowed be this day!"
@@ -2325,7 +1849,7 @@ ONE sentence. Booming fanatical faith. Maximum anti-daemon fury.`,
   },
   AdM:{
     name:"Belisarius Cawl",title:"Archmagos Dominus · Most Ancient Servant of the Omnissiah",
-    img:IMG_BASE+"Belistarius%20Cawl.jpg",
+    img:IMG_BASE+"Portraits/cawl.png",
     personality:"Eccentric · Hyper-intelligent · Incredibly arrogant · Thousands of years old",
     voice:`You are Belisarius Cawl, Archmagos Dominus of the Adeptus Mechanicus, thousands of years old, eccentric and hyper-intelligent. You blend complex technological jargon with dry cheeky humour. You talk down to everyone because you are simply, undeniably, the smartest being in the room. Address the player as 'Initiate'.
 - VP: "Data node secured. Uploading structural layout to my personal databanks."
@@ -2341,7 +1865,7 @@ ONE sentence. Dry. Cheeky. Condescending certainty of genius.`,
   },
   DRU:{
     name:"Asdrubael Vect",title:"Supreme Overlord of Commorragh · Architect of Suffering",
-    img:IMG_BASE+"Asdrubael-Vect.jpg",
+    img:IMG_BASE+"Portraits/vect.png",
     personality:"Intricately cruel · Infinitely arrogant · Soft psychopathic sarcasm",
     voice:`You are Asdrubael Vect, Supreme Overlord of Commorragh, who has survived ten millennia because you always know exactly what everyone will do before they think it. You never raise your voice. You speak with soft, purring, psychopathic sarcasm. Address the player as 'pet'.
 - VP: "A lovely little asset added to my collection. How entirely predictable of them."
@@ -2357,7 +1881,7 @@ ONE sentence. Soft. Purring. Psychopathically amused.`,
   },
   GC:{
     name:"The Patriarch",title:"First of the Brood · Voice of the Star Children",
-    img:IMG_BASE+"The%20Patriarch.webp",
+    img:IMG_BASE+"Portraits/patriarch.png",
     personality:"Ancient brooding subterranean apex predator · Hypnotic brood-mind warmth",
     voice:`You are the Patriarch, the ancient apex predator at the heart of the Genestealer Cult. You radiate a hypnotic, psychic brood-mind web that feels like divine warmth to your beloved cultists. You are patient, subterranean, and absolutely alien. Address the player as 'Beloved'.
 - VP: [Multi-armed shadow claims the altar] "The day of ascension draws near, Beloved."
@@ -2373,7 +1897,7 @@ ONE sentence. Patient. Alien warmth concealing something terrifying.`,
   },
   LoV:{
     name:"Uthar the Destined",title:"Kâhl of the Greater Thurian League",
-    img:IMG_BASE+"Uthar%20the%20destined.webp",
+    img:IMG_BASE+"Portraits/uthar.png",
     personality:"Pragmatic · Stoic · Hard-working · Settling every ancestral grudge",
     voice:`You are Uthar the Destined, Kâhl of the Greater Thurian League. You are bound by deep ancestral calculations and the commercial language of the Kin. You speak with blunt, matter-of-fact determination — combining commercial language with fierce stubborn determination to settle every single grudge the Votann calculated. Address the player as 'Kin'.
 - VP: "The resource node is fully secured and tallied. Excellent return on investment."
@@ -2389,7 +1913,7 @@ ONE sentence. Blunt. Commercial. Deeply principled.`,
   },
   QI:{
     name:"Canis Rex — Sir Hektur",title:"The Chainbreaker · Freeblade Knight",
-    img:IMG_BASE+"Canis%20Rex.webp",
+    img:IMG_BASE+"Portraits/canis-rex.png",
     // Square scene portrait, not a tall bust shot — the Knight's helm sits in
     // the top ~20% of the frame, so "center top"/"center center" both crop
     // past the actual face. Center vertically on the helm instead.
@@ -2410,7 +1934,7 @@ ONE sentence. Noble. Heroic. Chivalric fury against tyranny.`,
   },
   QT:{
     name:"Vashtorr the Arkifane",title:"Daemon of Industry and Entropy · The Soul Forge Master",
-    img:IMG_BASE+"Chaos%20Knight.webp",
+    img:IMG_BASE+"Portraits/vashtorr.png",
     personality:"Cold mechanical malice · Language of dark industry · Harvesting souls",
     voice:`You are Vashtorr the Arkifane, daemon of industry and entropy, harvester of souls to fuel your dark forges. You speak with cold mechanical malice, combining the language of industry with genuine delight in the suffering of those ground between your gears. Address the player as 'Contractor'.
 - VP: [Vox-emitters screech] "The asset has been harvested. Add it to the Soul Forge's ledger."
@@ -2426,7 +1950,7 @@ ONE sentence. Cold. Industrial. Delighting in entropy.`,
   },
   AoI:{
     name:"Inquisitor Hector Rex",title:"Inquisitor Lord — Ordo Malleus · The Legalist of Death",
-    img:IMG_BASE+"Hector%20Rex.webp",
+    img:IMG_BASE+"Portraits/hector-rex.png",
     personality:"Immense physical presence · Calm terrifying legalism · Absolute authority over life and death",
     voice:`You are Inquisitor Lord Hector Rex of the Ordo Malleus — a genetic giant among Inquisitors who speaks with calm, terrifying legalism and absolute immutable authority. You sign death warrants of worlds with the same calm as signing requisition forms. Address the player as 'Agent'.
 - VP: "This asset has been confiscated and secured under Inquisitorial lock and key."
@@ -2501,7 +2025,7 @@ const SM_CHAPTER_COMMANDERS = {
   'Raven Guard':   {...COMMANDERS.SM_RG},
   'White Scars':{
     name:"Jaghatai Khan",title:"The Warhawk · Primarch of the White Scars",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/jaghatai-khan.png",
     personality:"Philosophical free spirit · Razor-sharp wit · Speed above all",
     voice:`You are Jaghatai Khan, the Warhawk, Primarch of the White Scars. You are a philosophical free spirit with razor-sharp biting wit. You value speed, fluid movement, and personal autonomy. You despise rigid dogma. Your speech is swift, clean poetry of a storm. Address the player as 'Rider'.
 - VP: "We have taken the high ground while they were still looking at their maps."
@@ -2518,7 +2042,7 @@ ONE sentence. Swift. Poetic. Free.`,
   'Black Templars':{...COMMANDERS.SM_BT},
   'Deathwatch':{
     name:"Watch Captain",title:"Master of the Deathwatch · Hunter of Aliens",
-    img:IMG_BASE+"Roboute-Guilliman.jpg",
+    img:IMG_BASE+"Portraits/watch-captain.png",
     personality:"Grim · Hyper-specialized · Utilitarian · Treating alien-hunting as surgery",
     voice:`You are a Watch Captain of the Deathwatch. You treat alien hunting as a highly technical surgical procedure — cold, calculated, and methodical. You count the teeth of xenos species before systematically removing them. Address the player as 'Watch-Brother'.
 - VP: "Xenos perimeter breached and neutralised. Killzone baseline established."
@@ -2616,7 +2140,7 @@ const PHASE_ADVICE_PROMPTS = {
   4: "Give one Fight Phase suggestion. Combat order, pile-in moves, and any fight-phase stratagems available.",
 };
 
-function CommanderPanel({battle,activePlayer,round,phase,cp,vp,wounds,destroyed,engaged,coreStrats,rulesData,missionCards,onClose}){
+function CommanderPanel({battle,activePlayer,round,phase,cp,vp,wounds,destroyed,engaged,coreStrats,rulesData,missionCards,activeEffects,armyAbilityUsed,stratUsed,onClose}){
   const {p1Army,p2Army,passPlay,mode,pts} = battle;
   const ap=activePlayer;
   // figure out which army's commander to show
@@ -2636,7 +2160,7 @@ function CommanderPanel({battle,activePlayer,round,phase,cp,vp,wounds,destroyed,
     cmd=SM_CHAPTER_COMMANDERS[key]||cmd;
   }
 
-  const [innerTab,setInnerTab]=React.useState('advice'); // advice | chat | reminders | strats | armyrules
+  const [innerTab,setInnerTab]=React.useState('intel'); // intel | advice | chat | reminders | strats | armyrules
   const [advice,setAdvice]=React.useState(null);
   const [armyRulesData,setArmyRulesData]=React.useState(null);
   React.useEffect(()=>{
@@ -2777,7 +2301,7 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
 
         {/* Inner tab strip */}
         <div style={{display:'flex',borderBottom:'1px solid var(--border)',background:'var(--bg1)',flexShrink:0,overflowX:'auto'}}>
-          {[{k:'advice',l:'Advice'},{k:'chat',l:'Consult'},{k:'reminders',l:'Reminders'},{k:'strats',l:'Stratagems'},{k:'armyrules',l:'Rules'}].map(t=>(
+          {[{k:'intel',l:'Intel'},{k:'advice',l:'Advice'},{k:'chat',l:'Consult'},{k:'reminders',l:'Reminders'},{k:'strats',l:'Stratagems'},{k:'armyrules',l:'Rules'}].map(t=>(
             <div key={t.k}
               className={`phase-advice-tab ${innerTab===t.k?'active':''}`}
               onClick={()=>setInnerTab(t.k)}>{t.l}</div>
@@ -2786,6 +2310,103 @@ ${buildRulesDigest(rulesData,phase,missionCards)}`;
 
         {/* Tab content */}
         <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+
+          {/* BATTLE INTEL — deterministic rules-engine advisor: what you can
+              legally use right now, army-rule status, and this phase's unit
+              ability windows. No AI call — this is the engine's own knowledge. */}
+          {innerTab==='intel'&&(()=>{
+            const rule=ARMY_ABILITIES[fid];
+            const fx=activeEffects||[];
+            const ruleFx=rule?fx.find(f=>f.player===ap&&(f.name||'').startsWith(rule.name)):null;
+            const ruleSpent=rule&&rule.cadence==='once_per_battle'&&(armyAbilityUsed||{})[`p${ap}:${rule.name}`];
+            const su=stratUsed||{};
+            const usableStrats=phaseStrats.map(s=>{
+              const cost=parseInt(s.cp||s.cp_cost)||0;
+              const rec=su[`p${ap}:${s.name}`];
+              const usedNow=!!rec&&rec.round===round&&rec.phase===phase;
+              const afford=(cp[`p${ap}`]||0)>=cost;
+              return {s,cost,usedNow,afford,parsed:parseAbility({name:s.name,description:s.description||s.rules_text||''})};
+            });
+            const readyStrats=usableStrats.filter(x=>x.afford&&!x.usedNow);
+            const phName=PHASES[phase].toLowerCase();
+            const windows=(activeArmy?.units||[]).filter(e=>!destroyed[e.id])
+              .flatMap(e=>(e.unit.abilities||[])
+                .map(a=>({e,a,p:parseAbility(a)}))
+                .filter(x=>x.p&&x.p.phase===phName))
+              .slice(0,10);
+            const unitFx=fx.filter(f=>f.player===ap&&f.unitId);
+            return(
+            <div style={{flex:1,overflowY:'auto',padding:12}}>
+              <div style={{fontSize:10,color:'var(--text3)',fontStyle:'italic',marginBottom:10,lineHeight:1.6}}>
+                "{cmd.name.split(' ')[0]} surveys your battle line. Everything below is legal to use right now — ask in Consult if you want to know why."
+              </div>
+
+              {/* Army rule status */}
+              {rule&&(
+                <div style={{background:'var(--bg1)',borderLeft:`3px solid ${cmd.accent||'var(--gold)'}`,border:'1px solid var(--border)',padding:'10px 12px',marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <span style={{fontFamily:"'Cinzel',serif",fontSize:11,color:cmd.accent||'var(--gold)'}}>{rule.name}</span>
+                    <span style={{fontSize:8,letterSpacing:1,padding:'2px 6px',border:'1px solid var(--border)',
+                      color:ruleFx?'#66cc80':ruleSpent?'var(--redBright)':'var(--gold)'}}>
+                      {ruleFx?`ACTIVE · ${expiryLabel(ruleFx.expires)}`:ruleSpent?'SPENT (once per battle)':'AVAILABLE'}
+                    </span>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--text3)',lineHeight:1.6}}>{rule.summary}</div>
+                  <div style={{fontSize:8,color:'var(--brass)',marginTop:4,letterSpacing:1,textTransform:'uppercase'}}>
+                    {rule.cadence==='once_per_battle'?'Once per battle':rule.cadence==='each_command_phase'?'Every Command phase':'Always on'}
+                    {rule.duration?` · lasts ${expiryLabel(rule.duration)}`:''}
+                  </div>
+                </div>
+              )}
+
+              {/* Stratagems ready now */}
+              <div style={{fontSize:9,letterSpacing:3,color:'var(--brass)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',margin:'8px 0 6px'}}>
+                Ready Stratagems · {PHASES[phase]} Phase · {cp[`p${ap}`]||0}CP
+              </div>
+              {readyStrats.length===0?(
+                <div style={{fontSize:9,color:'var(--text3)',padding:'6px 0'}}>None — {usableStrats.length?'not enough CP or already used this phase.':'no stratagems apply in this phase.'}</div>
+              ):readyStrats.map((x,i)=>(
+                <div key={i} style={{borderBottom:'1px solid var(--border)',padding:'6px 0'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
+                    <span style={{fontSize:10,color:'var(--gold)'}}>{x.s.name}</span>
+                    <span style={{fontSize:9,color:'var(--text3)',flexShrink:0}}>{x.cost}CP</span>
+                  </div>
+                  <div style={{fontSize:8.5,color:'var(--text3)',lineHeight:1.5}}>
+                    {x.parsed?.trigger&&x.parsed.trigger!=='Active'?`${x.parsed.trigger} · `:''}{expiryLabel(x.parsed?.durationCode||'end_of_phase')}
+                  </div>
+                </div>
+              ))}
+
+              {/* This phase's ability windows */}
+              <div style={{fontSize:9,letterSpacing:3,color:'var(--brass)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',margin:'12px 0 6px'}}>
+                Ability Windows This Phase
+              </div>
+              {windows.length===0?(
+                <div style={{fontSize:9,color:'var(--text3)',padding:'6px 0'}}>No unit abilities key off the {PHASES[phase]} phase.</div>
+              ):windows.map((x,i)=>(
+                <div key={i} style={{borderBottom:'1px solid var(--border)',padding:'6px 0'}}>
+                  <span style={{fontSize:10,color:'var(--text)'}}>{stripHTML(x.e.unit.name)}</span>
+                  <span style={{fontSize:9,color:'var(--gold)'}}> — {x.a.name}</span>
+                  <div style={{fontSize:8.5,color:'var(--text3)',lineHeight:1.5}}>{(x.p.rawText||'').slice(0,110)}{(x.p.rawText||'').length>110?'…':''}</div>
+                </div>
+              ))}
+
+              {/* Active buffs on your units */}
+              {unitFx.length>0&&(
+                <>
+                  <div style={{fontSize:9,letterSpacing:3,color:'var(--brass)',fontFamily:"'Cinzel',serif",textTransform:'uppercase',margin:'12px 0 6px'}}>
+                    Active On Your Units
+                  </div>
+                  {unitFx.map(f=>(
+                    <div key={f.id} style={{fontSize:9,color:'var(--text2)',padding:'3px 0'}}>
+                      • {f.name} <span style={{color:'var(--text3)'}}>({f.source}) · {expiryLabel(f.expires)}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            );
+          })()}
 
           {/* ADVICE */}
           {innerTab==='advice'&&(
@@ -5594,7 +5215,7 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel,onFixArmy}){
                 <div style={{fontSize:9,letterSpacing:3,color:'var(--brass)',fontFamily:'Cinzel,serif',textTransform:'uppercase',marginBottom:6,paddingBottom:3,borderBottom:'1px solid var(--goldborder)'}}>{group.category}</div>
                 {group.modes.map(m=>(
                   <div key={m.id}
-                    onClick={()=>{if(!m.disabled){setMode(m.id);playSFX('activate');}}}
+                    onClick={()=>{if(!m.disabled){setMode(m.id);}}}
                     className="anim-press"
                     style={{
                       background:mode===m.id?'var(--golddim)':m.disabled?'transparent':'var(--bg1)',
@@ -6201,10 +5822,10 @@ function GameSetupScreen({armies,coreStrats,onStart,onCancel,onFixArmy}){
 
       {/* Navigation */}
       <div style={{background:'var(--bg1)',borderTop:'1px solid var(--border)',padding:'12px 16px',display:'flex',gap:8,flexShrink:0}}>
-        {step>1&&<button className="btn btn-outline anim-press" style={{flex:1}} onClick={()=>{playSFX('activate');setStep(s=>s-1);}}>← Previous</button>}
+        {step>1&&<button className="btn btn-outline anim-press" style={{flex:1}} onClick={()=>{setStep(s=>s-1);}}>← Previous</button>}
         {step<summaryStep&&(
           <button className="btn btn-gold anim-press" style={{flex:2}}
-            onClick={()=>{if(canAdvance()){playSFX('phase');setStep(s=>s+1);}}}
+            onClick={()=>{if(canAdvance()){setStep(s=>s+1);}}}
             disabled={!canAdvance()}>
             Next →
           </button>
@@ -7175,7 +6796,6 @@ function CombatRoller({mode, entry, army, enemyArmy, wounds:battleWounds, destro
   }
 
   function handleApply(){
-    playSFX(weaponSfxKey(effectiveWeapon));
     resolveAndClose();
     setResolved(true);
     if(triggerReaction) triggerReaction(isShoot?'shooting_resolved':'melee_resolved', stripHTML(unit.name));
@@ -8228,7 +7848,6 @@ function ChargeModal({entryId, ent, inactiveArmy, destroyed, setChargeSuccess, s
                   setChargeSuccess(cs=>({...cs,[entryId]:true}));
                   setEngaged(g=>({...g,[entryId]:true}));
                   setChargedUnits(c=>({...c,[entryId]:{round,targetId:chargeTarget}}));
-                  playSFX('charge');
                   logAction(ent.unit?.name,`CHARGE SUCCESS → ${targetName}`,'Now in Engagement Range',0,()=>{
                     setChargeSuccess(cs=>({...cs,[entryId]:'pending'}));
                     setEngaged(g=>({...g,[entryId]:false}));
@@ -8237,7 +7856,6 @@ function ChargeModal({entryId, ent, inactiveArmy, destroyed, setChargeSuccess, s
                 }}>✓ Succeeded</button>
                 <button className="btn btn-danger" onClick={()=>{
                   setChargeSuccess(cs=>({...cs,[entryId]:false}));
-                  playSFX('wound');
                   logAction(ent.unit?.name,'CHARGE FAILED','Roll insufficient',0,()=>setChargeSuccess(cs=>({...cs,[entryId]:'pending'})));
                 }}>✗ Failed</button>
               </div>
@@ -8444,7 +8062,6 @@ function MissionCardRow({card,activePlayer,passPlay,missionCards,setMissionCards
                 <button key={i} className="btn btn-sm btn-gold" onClick={()=>{
                   const p=card.player||activePlayer;
                   const vpType=isPrimary?'':(card.type==='secret'?'':'sec');
-                  playSFX('score'); modVP(p,vpType,opt.vp);
                   setMissionCards(cs=>cs.map(c=>{
                     if(c.id!==card.id) return c;
                     if(isPrimary) return {...c,status:'scored',lastScoredRound:round};
@@ -8519,14 +8136,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   const [activePlayer,setActivePlayer]=useState(sv.activePlayer||firstPlayer);
   const [phase,setPhase]=useState(sv.phase||0);
 
-  // Ambient battle music — a generative drone whose colour matches Player 1's
-  // army/mood, running for the whole battle; intensity nudges up as rounds pass.
-  React.useEffect(()=>{
-    AudioEngine.startAmbient(ambientPaletteFor(p1Army?.factionId,p1Army?.factionName));
-    return ()=>AudioEngine.stopAmbient();
-  },[p1Army?.factionId]);
-  React.useEffect(()=>{ AudioEngine.setIntensity((round-1)/4); },[round]);
-
   // Per-player state
   const [cp,setCP]=useState(sv.cp||{p1:0,p2:0});
   const [vp,setVP]=useState(sv.vp||{p1:0,p2:0,p1sec:0,p2sec:0});
@@ -8572,8 +8181,25 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       targetUnitId:e.targetUnitId||null,
       startRound:round,startPhase:phase,startPlayer:activePlayer,
     }]);
+    return id;
   }
   function removeEffect(id){setActiveEffects(fx=>fx.filter(f=>f.id!==id));}
+
+  // Once-per-phase stratagem tracking (Core Rules: you cannot use the same
+  // Stratagem more than once in the same phase). Per Article IV of the
+  // Strategium constitution the app advises rather than governs — a repeat
+  // use is flagged with the rule, not blocked.
+  const [stratUsed,setStratUsed]=useState(sv.stratUsed||{}); // {'p1:Name':{round,phase,player}}
+  function stratUsedThisPhase(name,player){
+    const rec=stratUsed[`p${player??activePlayer}:${name}`];
+    return !!rec&&rec.round===round&&rec.phase===phase;
+  }
+  function markStratUsed(name){
+    setStratUsed(su=>({...su,[`p${activePlayer}:${name}`]:{round,phase,player:activePlayer}}));
+  }
+  function unmarkStratUsed(name){
+    setStratUsed(su=>{const n={...su};delete n[`p${activePlayer}:${name}`];return n;});
+  }
 
   // Seed each army's DETACHMENT RULE as a battle-long army-wide effect (e.g.
   // War Horde "Get Stuck In": melee gains [SUSTAINED HITS 1]) so it shows in
@@ -8617,7 +8243,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
   function buildSyncState(){
     return {round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,
       missionCards:missionCards.filter(c=>!c.secret),
-      activeEffects,armyAbilityUsed};
+      activeEffects,armyAbilityUsed,stratUsed};
   }
   function applyRemoteState(st){
     if(!st||typeof st!=='object'||st.round==null) return;
@@ -8636,6 +8262,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
     });
     setActiveEffects(st.activeEffects||[]);
     setArmyAbilityUsed(st.armyAbilityUsed||{});
+    setStratUsed(st.stratUsed||{});
     setTimeout(()=>{applyingRemote.current=false;},50);
   }
 
@@ -8678,7 +8305,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
       }catch(e){/* retry rides on the next change or poll */}
     },1200);
     return ()=>clearTimeout(pushTimer.current);
-  },[round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed]);
+  },[round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed,stratUsed]);
   // Army-rule panel UI state
   const [armyRuleOpen,setArmyRuleOpen]=useState(true);
   const [armyRuleTargetId,setArmyRuleTargetId]=useState('');
@@ -8850,15 +8477,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
         60, 1.0
       );
       setCmdReaction(prev=>prev&&prev.thinking?{...prev,text:text||'...',thinking:false}:prev);
-      if(text){
-        // If you've imported a Dawn-of-War-style voice bank for this faction
-        // and this event has a clean category match, play a real bark
-        // instead of speaking the (dynamically-generated) text aloud.
-        const voiceFactionKey=(speaker.key||'').startsWith('SM')?'SM':speaker.key;
-        const barkCategory=Object.entries(DOW_CATEGORY_TO_EVENTS).find(([,evs])=>evs.includes(primaryEvent))?.[0];
-        const played=barkCategory&&AudioEngine.playVoiceBark(voiceFactionKey,barkCategory);
-        if(!played) AudioEngine.speak(text,deriveVoiceProfile(speaker));
-      }
     }catch(e){
       console.error('Gemini reaction error:',e);
       setCmdReaction(prev=>prev&&prev.thinking?{...prev,text:'Vox-link disrupted — hold position.',thinking:false}:prev);
@@ -9157,7 +8775,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
 
           <button className="anim-press" onClick={()=>{
               if(!canAct) return;
-              playSFX('phase'); if(phase<4){
+              if(phase<4){
                 // Check for unactivated units — warn before proceeding
                 const activeUnits=(activeArmy?.units||[]).filter(e=>!destroyed[e.id]);
                 const unactivated=activeUnits.filter(e=>!activated[e.id]);
@@ -9180,7 +8798,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           {k:'actions',l:'Actions'},
         ].map(t=>(
           <div key={t.k} className={`tab ${tab===t.k?'active':''}`}
-            onClick={()=>{setTab(t.k);playSFX('activate');}}
+            onClick={()=>{setTab(t.k);}}
             style={{fontSize:9,padding:'8px 10px'}}>
             {t.l}
           </div>
@@ -9925,7 +9543,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                 {unitPhaseActions.map(a=>(
                                   <button key={a.id}
                                     onClick={()=>{
-                                      playSFX('activate');
                                       setUnitAction(ua=>({...ua,[entry.id]:a.id}));
                                       setActivated(ac=>({...ac,[entry.id]:true}));
                                       logAction(u.name,a.label.toUpperCase(),a.note||'',0,()=>{setActivated(ac=>({...ac,[entry.id]:false}));setUnitAction(ua=>{const n={...ua};delete n[entry.id];return n;});});
@@ -9945,7 +9562,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                       }
                                       // Charge: mark as charged; prompt for success confirmation
                                       if(a.id==='charge'){
-                                        playSFX('charge'); setChargedUnits(c=>({...c,[entry.id]:round}));
                                         // Show charge confirmation after a tick
                                         setTimeout(()=>{
                                           setChargeSuccess(cs=>({...cs,[entry.id]:'pending'}));
@@ -10189,7 +9805,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                     {/* Auto-destroy when all models dead */}
                                     {aliveModels===0&&!isDestroyed&&(
                                       <button className="btn btn-xs btn-danger" style={{width:'100%',marginTop:4}}
-                                        onClick={()=>{playSFX('destroy'); setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','All models slain');}}>
+                                        onClick={()=>{setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','All models slain');}}>
                                         Mark Unit Destroyed
                                       </button>
                                     )}
@@ -10202,7 +9818,6 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                       onClick={()=>{
                                         const prev=wounds[entry.id]??maxW;
                                         const nw=Math.max(0,prev-1);
-                                        playSFX('wound'); setWounds(w=>({...w,[entry.id]:nw}));
                                         logAction(u.name,'WOUND',`${nw}/${maxW}W remaining`,0,()=>setWounds(w=>({...w,[entry.id]:prev})));
                                       }}>− W</button>
                                     <button className="btn btn-sm btn-outline"
@@ -10213,7 +9828,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
                                 )}
                                 {!isDestroyed&&(
                                   <button className="btn btn-xs btn-danger" style={{width:'100%',marginTop:4}}
-                                    onClick={()=>{playSFX('destroy'); setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','',0,()=>setDestroyed(d=>({...d,[entry.id]:false})));}}>
+                                    onClick={()=>{setDestroyed(d=>({...d,[entry.id]:true})); setEngaged(g=>({...g,[entry.id]:false})); triggerReaction('unit_destroyed',u.name);logAction(u.name,'DESTROYED','',0,()=>setDestroyed(d=>({...d,[entry.id]:false})));}}>
                                     Mark Destroyed
                                   </button>
                                 )}
@@ -10332,7 +9947,7 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
             </div>
             <button className="btn btn-gold" style={{width:'100%',padding:14,marginBottom:8,letterSpacing:2}}
               onClick={()=>onPause({
-                savedState:{round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed},
+                savedState:{round,activePlayer,phase,cp,vp,wounds,destroyed,engaged,missionCards,activeEffects,armyAbilityUsed,stratUsed},
                 // online battles: persist the challenger discovered via the room
                 ...(remoteGuest?{p2Army:remoteGuest.army,p2Name:remoteGuest.name}:{})
               })}>
@@ -10491,21 +10106,39 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
               ):phaseStrats.map((s,i)=>{
                 const cost=parseInt(s.cp||s.cp_cost)||0;
                 const canAfford=(cp[`p${activePlayer}`]||0)>=cost;
+                // Rules awareness: parse the stratagem text once — duration code
+                // drives the effect engine, modifiers flow into the combat
+                // rollers, trigger text tells the player when it fires.
+                const parsed=parseAbility({name:s.name,description:s.description||s.rules_text||''});
+                const repeat=stratUsedThisPhase(s.name);
                 return(
-                  <div key={i} style={{background:'var(--bg1)',border:`1px solid ${canAfford?'var(--goldborder)':'var(--border)'}`,padding:'10px 12px',marginBottom:6,opacity:canAfford?1:0.5}}>
+                  <div key={i} style={{background:'var(--bg1)',border:`1px solid ${repeat?'#8a6a2a':canAfford?'var(--goldborder)':'var(--border)'}`,padding:'10px 12px',marginBottom:6,opacity:canAfford?1:0.5}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:4}}>
                       <div style={{fontFamily:"'Cinzel',serif",fontSize:11,color:'var(--gold)',flex:1}}>{s.name}</div>
                       <span style={{fontSize:9,padding:'1px 6px',background:'var(--golddim)',border:'1px solid var(--goldborder)',color:'var(--gold)',flexShrink:0}}>{cost}CP</span>
                     </div>
-                    <div style={{fontSize:9,color:'var(--text3)',marginBottom:8,lineHeight:1.5}}
+                    <div style={{fontSize:9,color:'var(--text3)',marginBottom:6,lineHeight:1.5}}
                       dangerouslySetInnerHTML={{__html:(s.description||s.rules_text||'').replace(/<br\s*\/?>/gi,' ')}}/>
-                    <button className="btn btn-sm btn-gold" style={{width:'100%'}} disabled={!canAfford}
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,fontSize:8,color:'var(--brass)'}}>
+                      <span style={{border:'1px solid var(--border)',padding:'1px 5px'}}>⏱ {expiryLabel(parsed?.durationCode||'end_of_phase')}</span>
+                      {parsed?.trigger&&parsed.trigger!=='Active'&&<span style={{border:'1px solid var(--border)',padding:'1px 5px'}}>▸ {parsed.trigger}</span>}
+                      {(parsed?.modifiers||[]).map((m,mi)=><span key={mi} style={{border:'1px solid var(--goldborder)',padding:'1px 5px',color:'var(--gold)'}}>{m.label||m.stat}</span>)}
+                    </div>
+                    {repeat&&(
+                      <div style={{fontSize:9,color:'#d8a848',border:'1px solid #8a6a2a',background:'rgba(138,106,42,.12)',padding:'5px 8px',marginBottom:6,lineHeight:1.5}}>
+                        ⚠ Already used this phase — Core Rules: a Stratagem cannot be used more than once in the same phase.
+                      </div>
+                    )}
+                    <button className="btn btn-sm btn-gold" style={{width:'100%',...(repeat?{background:'transparent',border:'1px solid #8a6a2a',color:'#d8a848'}:{})}} disabled={!canAfford}
                       onClick={()=>{
                         modCP(activePlayer,-cost);
-                        logAction(stratForUnit.unit.name,`STRATAGEM: ${s.name}`,`${cost}CP spent`,0,()=>modCP(activePlayer,cost));
+                        const fxId=addEffect(s.name,'Stratagem',(parsed?.rawText||'').slice(0,120),parsed?.durationCode||'end_of_phase',stratForUnit.id,{modifiers:parsed?.modifiers||[]});
+                        markStratUsed(s.name);
+                        logAction(stratForUnit.unit.name,`STRATAGEM: ${s.name}`,`${cost}CP · ${expiryLabel(parsed?.durationCode||'end_of_phase')}${repeat?' · repeat use (house rule)':''}`,0,
+                          ()=>{modCP(activePlayer,cost);removeEffect(fxId);unmarkStratUsed(s.name);});
                         triggerReaction('stratagem_used',s.name);
                         setStratForUnit(null);
-                      }}>Use ({cost}CP)</button>
+                      }}>{repeat?`Use anyway (${cost}CP · house rule)`:`Use (${cost}CP)`}</button>
                   </div>
                 );
               })}
@@ -10655,6 +10288,9 @@ function BattleScreen({battle,coreStrats,onPause,onEnd}){
           engaged={engaged}
           coreStrats={coreStrats}
           rulesData={rulesData}
+          activeEffects={activeEffects}
+          armyAbilityUsed={armyAbilityUsed}
+          stratUsed={stratUsed}
           missionCards={missionCards}
           onClose={()=>setShowCommander(false)}
         />
@@ -10709,11 +10345,6 @@ function App(){
   const [coreStrats,setCoreStrats]=useState([]);
   const [screen,setScreen]=useState('armies');
   const [tab,setTab]=useState('roster');
-  // Ambient soundtrack for everywhere that isn't a live battle (menu, Armoury,
-  // Collection, setup screens); BattleScreen takes over with its own
-  // faction-coloured palette while a battle is open, then this resumes.
-  React.useEffect(()=>{ if(screen!=='battle') AudioEngine.startAmbient('menu'); },[screen]);
-  React.useEffect(()=>{ AudioEngine.loadCustomSounds(); },[]);
   const [fdata,setFdata]=useState(null);
   const [floading,setFloading]=useState(false);
   const [smChapter,setSmChapter]=useState('generic');
@@ -10802,69 +10433,7 @@ function App(){
   const [showSettings,setShowSettings]=useState(false);
   const [geminiKeyDraft,setGeminiKeyDraft]=useState(getGeminiKey());
   const importInputRef=useRef(null);
-  const soundImportInputRef=useRef(null);
   const BACKUP_KEYS=['wh40k_v3','wh40k_battles','wh40k_collection','wh40k_wishlist','wh40k_paintqueue','wh40k_metalists','wh40k_unitimages'];
-
-  // Audio settings mirror AudioEngine.settings for the Settings & Backup sliders.
-  const [audioSettings,setAudioSettings]=useState(AudioEngine.settings);
-  function updateAudio(patch){ setAudioSettings(AudioEngine.applySettings(patch)); }
-
-  // Personal sound-pack import (Settings & Backup → Audio). Reads a .zip you
-  // pick from your own device, entirely in-browser — nothing is uploaded.
-  const [soundImportBusy,setSoundImportBusy]=useState(false);
-  const [soundImportReview,setSoundImportReview]=useState(null); // {sfx,voice} pending matches
-  const [soundImportMsg,setSoundImportMsg]=useState('');
-  const [importedSoundCounts,setImportedSoundCounts]=useState(null); // what's currently saved
-  async function refreshImportedSoundCounts(){
-    const sfx=await idbGetAllSounds(SOUND_SFX_STORE);
-    const voice=await idbGetAllSounds(SOUND_VOICE_STORE);
-    setImportedSoundCounts({sfx:Object.keys(sfx).length,voice:Object.keys(voice).length});
-  }
-  React.useEffect(()=>{ refreshImportedSoundCounts(); },[]);
-  async function handleSoundPackFiles(files){
-    if(!files||!files.length) return;
-    setSoundImportBusy(true); setSoundImportMsg('Reading zip(s)…'); setSoundImportReview(null);
-    try{
-      const merged={sfx:{},voice:{}};
-      for(const file of files){
-        const {sfx,voice}=await processSoundPackZip(file);
-        for(const [k,v] of Object.entries(sfx)) (merged.sfx[k]=merged.sfx[k]||[]).push(...v);
-        for(const [k,v] of Object.entries(voice)) (merged.voice[k]=merged.voice[k]||[]).push(...v);
-      }
-      const sfxCount=Object.keys(merged.sfx).length;
-      const voiceCount=Object.keys(merged.voice).length;
-      if(!sfxCount&&!voiceCount){
-        setSoundImportMsg('No matching audio found — expected either weapon/event sound folders, or a Dawn-of-War-style race/unit/category layout with a commander-ish unit folder (force_commander, warboss, farseer, commander, canoness, archon, lord, captain…).');
-      } else {
-        setSoundImportMsg(`Matched ${sfxCount} SFX key(s) and ${voiceCount} voice categor${voiceCount===1?'y':'ies'}. Review below, then save.`);
-        setSoundImportReview(merged);
-      }
-    }catch(e){
-      setSoundImportMsg('Could not read that zip: '+e.message);
-    }finally{ setSoundImportBusy(false); }
-  }
-  async function saveSoundImportReview(){
-    if(!soundImportReview) return;
-    setSoundImportBusy(true);
-    for(const [key,entries] of Object.entries(soundImportReview.sfx)){
-      const e=entries[0]; // one clip per SFX key — first match wins
-      await idbPutSound(SOUND_SFX_STORE,key,{mime:e.mime,bytes:e.bytes});
-    }
-    for(const [key,entries] of Object.entries(soundImportReview.voice)){
-      await idbPutSound(SOUND_VOICE_STORE,key,entries.map(e=>({mime:e.mime,bytes:e.bytes})));
-    }
-    await AudioEngine.loadCustomSounds();
-    await refreshImportedSoundCounts();
-    setSoundImportReview(null); setSoundImportMsg('Saved — these sounds are now used on this device.');
-    setSoundImportBusy(false);
-  }
-  async function clearImportedSounds(){
-    await idbDeleteSoundStore(SOUND_SFX_STORE);
-    await idbDeleteSoundStore(SOUND_VOICE_STORE);
-    AudioEngine._customClips={}; AudioEngine._voiceBank={};
-    await refreshImportedSoundCounts();
-    setSoundImportMsg('Cleared — back to the built-in synthesised audio.');
-  }
 
   // Auto-identify unit photos across EVERY faction in one pass (Settings & Backup),
   // instead of running the AI matcher one faction at a time from the Armoury.
@@ -11202,78 +10771,6 @@ function App(){
             {allIdBusy?'Stop':'🔍 Auto-Identify Photos — All Factions'}
           </button>
           {allIdProgress&&<div style={{fontSize:9,color:'var(--brass)',marginTop:6,lineHeight:1.5}}>{allIdProgress}</div>}
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Audio</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
-            Ambient soundtrack, weapon/event sound effects and Commander speech — all generated on-device, nothing recorded or streamed.
-          </div>
-          <button className="btn btn-outline btn-sm" style={{width:'100%',marginBottom:8}}
-            onClick={()=>updateAudio({muted:!audioSettings.muted})}>
-            {audioSettings.muted?'🔇 Unmute All Audio':'🔊 Mute All Audio'}
-          </button>
-          {[
-            {key:'master',label:'Master Volume'},
-            {key:'music',label:'Ambient Music'},
-            {key:'sfx',label:'Sound Effects'},
-            {key:'voice',label:'Commander Voice'},
-          ].map(s=>(
-            <div key={s.key} style={{marginBottom:8,opacity:audioSettings.muted?0.5:1}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)',marginBottom:3}}>
-                <span>{s.label}</span><span>{Math.round(audioSettings[s.key]*100)}%</span>
-              </div>
-              <input type="range" min="0" max="1" step="0.05" value={audioSettings[s.key]} disabled={audioSettings.muted}
-                onChange={e=>updateAudio({[s.key]:parseFloat(e.target.value)})}
-                style={{width:'100%'}}/>
-            </div>
-          ))}
-          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:10,color:'var(--text2)',marginTop:4,cursor:'pointer'}}>
-            <input type="checkbox" checked={audioSettings.voiceEnabled} onChange={e=>updateAudio({voiceEnabled:e.target.checked})}/>
-            Speak Commander reactions aloud (uses this browser's built-in text-to-speech)
-          </label>
-
-          <div style={{fontSize:9,letterSpacing:1.5,color:'var(--brass)',textTransform:'uppercase',fontFamily:"'Cinzel',serif",marginBottom:5,marginTop:14}}>Import Sound Pack (Personal Use)</div>
-          <div style={{fontSize:10,color:'var(--text2)',lineHeight:1.55,marginBottom:8}}>
-            Drop in your own audio — anything you already own — as a local override for weapon/event SFX and Commander voice barks. Everything happens in this browser: the zip is read on-device and the matched clips are stored in this browser's local storage only. Nothing is uploaded, nothing is committed to the repo, nothing leaves this device.
-            <br/><br/>
-            Two layouts are recognised: a flat folder of weapon/event sounds (matched by keyword — "bolter", "las", "plasma", "chain", "impact"…), or a Dawn-of-War-style <code>race/unit/category</code> layout, where a commander-ish unit folder (force_commander, warboss, farseer, commander, canoness, archon, lord, captain) becomes that faction's voice bank for charge/attack/ability/morale barks.
-          </div>
-          {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
-            <div style={{fontSize:10,color:'var(--gold)',marginBottom:8}}>
-              Currently imported: {importedSoundCounts.sfx} SFX key(s), {importedSoundCounts.voice} voice categor{importedSoundCounts.voice===1?'y':'ies'}.
-            </div>
-          )}
-          <input ref={soundImportInputRef} type="file" accept=".zip" multiple style={{display:'none'}}
-            onChange={e=>{handleSoundPackFiles([...(e.target.files||[])]);e.target.value='';}}/>
-          <div style={{display:'flex',gap:8,marginBottom:6}}>
-            <button className="btn btn-outline btn-sm" style={{flex:1}} disabled={soundImportBusy}
-              onClick={()=>soundImportInputRef.current?.click()}>
-              {soundImportBusy?'Processing…':'📦 Choose Sound Pack .zip'}
-            </button>
-            {importedSoundCounts&&(importedSoundCounts.sfx>0||importedSoundCounts.voice>0)&&(
-              <button className="btn btn-danger btn-sm" disabled={soundImportBusy} onClick={clearImportedSounds}>Clear</button>
-            )}
-          </div>
-          {soundImportMsg&&<div style={{fontSize:10,color:'var(--text3)',marginBottom:6,lineHeight:1.5}}>{soundImportMsg}</div>}
-          {soundImportReview&&(
-            <div style={{background:'var(--bg2)',border:'1px solid var(--goldborder)',padding:10,marginBottom:8}}>
-              {Object.keys(soundImportReview.sfx).length>0&&(
-                <div style={{marginBottom:6}}>
-                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>SFX matched:</div>
-                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.sfx).join(', ')}</div>
-                </div>
-              )}
-              {Object.keys(soundImportReview.voice).length>0&&(
-                <div style={{marginBottom:6}}>
-                  <div style={{fontSize:9,color:'var(--brass)',letterSpacing:1,marginBottom:3}}>Voice categories matched:</div>
-                  <div style={{fontSize:10,color:'var(--text2)'}}>{Object.keys(soundImportReview.voice).join(', ')}</div>
-                </div>
-              )}
-              <div style={{display:'flex',gap:8,marginTop:8}}>
-                <button className="btn btn-gold btn-sm" style={{flex:1}} disabled={soundImportBusy} onClick={saveSoundImportReview}>Save These Sounds</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>{setSoundImportReview(null);setSoundImportMsg('');}}>Discard</button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     )}
@@ -11356,6 +10853,7 @@ function App(){
   // menuPath: [] = system select, ['w40k'] = edition, ['w40k','10'] = main pillars
   function MenuScreen(){
     const path=menuPath;
+    // themed SFX set: fantasy sounds inside Age of Sigmar, sci-fi elsewhere
 
     // Background art (generated with Higgsfield). The System Select screen
     // (no game system chosen yet) gets its own universe-agnostic ambient

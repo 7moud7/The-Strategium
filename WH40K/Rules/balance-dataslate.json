@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "source": "Warhammer 40,000 Balance Dataslate (official quarterly download, warhammer-community.com)",
+    "edition": 10,
+    "currentAsOf": "June 2026 dataslate",
+    "description": "Balance Dataslate tracking — how quarterly balance changes flow into The Strategium's data"
+  },
+
+  "authority": {
+    "level": "Official Commentary (canon level 2) — overrides printed codex rules, is overridden only by newer dataslates and FAQs",
+    "cadence": "Roughly 3 updates per year"
+  },
+
+  "howChangesAreApplied": {
+    "points": "Baked into unit data automatically: tools/Update-RulesData.ps1 syncs points from Wahapedia CSV exports (which incorporate every dataslate) into WH40K/Data/Unit Data/*.json, then Supabase re-ingests",
+    "datasheetText": "Wahapedia exports also carry ability rewordings — refreshed on the same pipeline",
+    "detachmentRules": "Carried in the faction JSON detachments, refreshed with the same conversion pass",
+    "freshnessCheck": "Wahapedia Last_update.csv timestamp; when it moves, rerun the pipeline"
+  },
+
+  "verification": {
+    "note": "This document records the mechanism, not the change list. For the authoritative change list always fetch the current dataslate PDF from warhammer-community.com downloads — per the rules authority protocol, never resolve a dispute from cached data when the official document is available."
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "source": "Warhammer 40,000 Boarding Actions rules + Boarding Actions Compendium (official download, warhammer-community.com)",
+    "sourceUrl": "https://www.warhammer-community.com/en-gb/articles/PO8NrpRs/boarding-actions-rules-download-perilous-close-quarters-battles-in-the-depths-of-space/",
+    "edition": 10,
+    "description": "Boarding Actions — close-quarters battles aboard space hulks and voidships on Gallowdark terrain"
+  },
+
+  "modeRules": {
+    "battlefield": "28\" x 48\" (two Boarding Actions game boards laid side by side)",
+    "terrain": "Gallowdark terrain: wall pieces, hatchways and architectural elements built to the mission's terrain layout",
+    "battleLength": "Per mission (Boarding Actions mission deck)",
+    "pointsLimit": 500
+  },
+
+  "armyConstruction": {
+    "roster": "A Boarding Patrol of up to 500 points",
+    "detachments": "Choose one of the 55 Boarding Actions detachments from the Compendium — each faction has bespoke mustering rules",
+    "datasheets": "Datasheet adjustments per faction account for the unique constraints of shipboard fighting (unit sizes, excluded units, modified abilities)"
+  },
+
+  "coreChanges": {
+    "hatchways": "Walls divide the board into rooms and corridors. New 'Operate Hatchway' action opens/closes doors; nearby enemy models can resist, resulting in a Strength-based roll-off over the door",
+    "visibility": "True line of sight is heavily restricted by walls — most fighting is room to room",
+    "tacticalManeuvers": "During the Shooting phase, eligible units can forfeit shooting and charging to perform Tactical Maneuver actions unique to this mode",
+    "reserves": "Heavily restricted; most missions deploy everything on the boards",
+    "engagement": "Modified engagement and movement rules for fighting through hatchways and along corridors"
+  },
+
+  "sequence": [
+    "Muster Boarding Patrols (500 pts, one Boarding Actions detachment each)",
+    "Determine mission and build the terrain layout",
+    "Deploy per mission map",
+    "Play the mission's battle rounds, scoring per mission",
+    "Determine victor"
+  ],
+
+  "notes": [
+    "Rules live in the free Boarding Actions download + the Boarding Actions Compendium (55 detachments, all-faction mustering)",
+    "Balanced separately from matched play"
+  ]
+}
